@@ -1,5 +1,10 @@
 import SwiftUI
 
+/// Breathing room between the switch button and the media pill below it. `cellGap`
+/// is the gap inside the remote's own panels; a slightly larger one keeps the
+/// switch button reading as a separate control rather than as part of that group.
+private let topGap: CGFloat = 8
+
 private struct ConsumerButton {
     let report: ConsumerReport
     let icon: String
@@ -23,6 +28,7 @@ struct RemoteView: View {
 
     @Environment(\.hid) private var hid
     @AppStorage(AppSettings.developerModeKey) private var developerMode = false
+    @AppStorage(AppSettings.remoteModeKey) private var mode = RemoteMode.keyboard
 
     var body: some View {
         if hid.isActive || developerMode {
@@ -33,15 +39,52 @@ struct RemoteView: View {
     }
 
     private var controls: some View {
-        GeometryReader { geo in
-            if geo.size.width > geo.size.height {
-                landscapeControls(geo.size)
-            } else {
-                portraitControls(geo.size)
+        VStack(spacing: topGap) {
+            // The way back to the keyboard page. In the top row rather than a
+            // toolbar so this page keeps the same shape as the keyboard page —
+            // no title bar, switch control sitting above the content — and in
+            // both orientations the D-pad column leaves this corner free.
+            modeSwitchButton
+            GeometryReader { geo in
+                if geo.size.width > geo.size.height {
+                    landscapeControls(geo.size)
+                } else {
+                    portraitControls(geo.size)
+                }
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    /// Mirrors the keyboard page's switch button: the same corner radius, fill and
+    /// icon + label, sized to the media pill rather than to a full-width row so it
+    /// does not stretch across the remote. It carries a fill of its own because it
+    /// sits on the page background, not on one of the remote's grouped panels.
+    private var modeSwitchButton: some View {
+        Button {
+            Haptics.tap(from: .keyboard)
+            withAnimation(.easeInOut(duration: 0.18)) {
+                mode = .keyboard
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "keyboard")
+                    .font(.system(size: 12, weight: .semibold))
+                Text(L10n.Tab.keyboard)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(groupFill)
+            )
+            .foregroundColor(.primary)
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func portraitControls(_ size: CGSize) -> some View {

@@ -30,6 +30,7 @@ struct KeyboardView: View {
     @Environment(\.hid) private var hid
     @AppStorage(AppSettings.developerModeKey) private var developerMode = false
     @AppStorage("BTRemote.keyboardPage") private var selectedPage = 0
+    @AppStorage(AppSettings.remoteModeKey) private var mode = RemoteMode.keyboard
 
     var body: some View {
         if hid.isActive || developerMode {
@@ -71,6 +72,7 @@ struct KeyboardView: View {
                 }
                 .buttonStyle(.plain)
             }
+            modeSwitchButton
             Button {
                 Haptics.tap(from: .keyboard)
                 hid.toggleVirtualKeyboard()
@@ -92,6 +94,39 @@ struct KeyboardView: View {
         // no top padding: this page has no title bar above the switcher, so the
         // switcher sits against the top edge and the keyboard gets the height back
         .padding(.top, 0)
+    }
+
+    /// One tap moves to the remote page. Sits after the page buttons and before the
+    /// collapse button, and reads as one of them: same fill, corner radius and icon +
+    /// label treatment, with a game controller standing in where each page button has
+    /// its own icon so it is not mistaken for a fourth page.
+    private var modeSwitchButton: some View {
+        Button {
+            Haptics.tap(from: .keyboard)
+            withAnimation(.easeInOut(duration: 0.18)) {
+                mode = .remote
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "gamecontroller")
+                    .font(.system(size: 12, weight: .semibold))
+                Text(L10n.Tab.remote)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+                    // The row is tight on the narrowest phones once this fifth button is
+                    // in it, so the label shrinks rather than pushing the row past the edge.
+                    .minimumScaleFactor(0.75)
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 6)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(groupFill)
+            )
+            .foregroundColor(.primary)
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder

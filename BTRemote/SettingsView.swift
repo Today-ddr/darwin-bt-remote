@@ -10,6 +10,7 @@ struct SettingsView: View {
     @AppStorage(AppSettings.scrollSensitivityKey) private var scrollSensitivity = AppSettings.defaultScrollSensitivity
     @AppStorage(AppSettings.developerModeKey) private var developerMode = false
     @AppStorage(AppSettings.useServiceChangedKey) private var forceServiceChanged = true
+    @AppStorage(AppSettings.liveTypingKey) private var liveTyping = true
     @AppStorage(AppSettings.hasSeenWelcomeKey) private var hasSeenWelcome = false
     @AppStorage(AppSettings.hapticsEnabledKey) private var hapticsEnabled = true
     @AppStorage(AppSettings.hapticsTrackpadKey) private var hapticsTrackpad = true
@@ -89,6 +90,13 @@ struct SettingsView: View {
                     .onChange(of: forceServiceChanged) { if $0 { lowEnergy.scheduleServiceChanged() } }
             }
             Section(header: Text(L10n.Settings.advanced)) {
+                // The classic keyboard's live-typing mode. It fits none of the other
+                // groups — appearance, trackpad, haptics and connection are all about
+                // a different surface — and this is the one section that is not
+                // itself wrapped in `#if os(iOS)`, so the setting stays reachable on
+                // macOS, where the classic keyboard also consumes it. Read back by
+                // ClassicKeyboardView through this same AppSettings.liveTypingKey.
+                Toggle(L10n.Keyboard.liveTyping, isOn: $liveTyping)
                 Toggle(L10n.Settings.developerMode, isOn: $developerMode)
                 Link(destination: AppSettings.repoURL) {
                     Label(L10n.Settings.sourceCode, systemImage: "chevron.left.forwardslash.chevron.right")

@@ -8,48 +8,25 @@ struct RemoteTabView: View {
     let goToSetup: () -> Void
 
     @AppStorage(AppSettings.remoteModeKey) private var mode = RemoteMode.keyboard
-    @AppStorage(AppSettings.liveTypingKey) private var liveTyping = true
 
     var body: some View {
         #if os(macOS)
-            NavigationStack { titledContent }
+            NavigationStack { content }
         #else
-            NavigationView { titledContent }
+            NavigationView { content }
                 .navigationViewStyle(.stack)
         #endif
     }
 
-    private var titledContent: some View {
-        content
-            .navigationTitle(L10n.Tab.remote)
-        #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-        #endif
-            .toolbar { menu }
-    }
-
+    /// No title bar on this page: the switcher row of whichever page is showing is its
+    /// topmost element. Each page carries its own button for switching to the other one —
+    /// `KeyboardView` adds a remote-page button to its page row, `RemoteView` puts a
+    /// keyboard-page button above the media pill — and each writes the shared mode key.
     @ViewBuilder
     private var content: some View {
         switch mode {
         case .keyboard: KeyboardView(goToSetup: goToSetup)
         case .remote: RemoteView(goToSetup: goToSetup)
-        }
-    }
-
-    @ToolbarContentBuilder
-    private var menu: some ToolbarContent {
-        ToolbarItem(placement: .primaryAction) {
-            Menu {
-                Picker(L10n.Remote.mode, selection: $mode) {
-                    Label(L10n.Tab.keyboard, systemImage: "keyboard").tag(RemoteMode.keyboard)
-                    Label(L10n.Tab.remote, systemImage: "gamecontroller").tag(RemoteMode.remote)
-                }
-                if mode == .keyboard {
-                    Toggle(L10n.Keyboard.liveTyping, isOn: $liveTyping)
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-            }
         }
     }
 }
