@@ -41,7 +41,8 @@ struct BTRemoteApp: App {
             AppSettings.hapticsEnabledKey: true,
             AppSettings.hapticsTrackpadKey: true,
             AppSettings.hapticsKeyboardKey: true,
-            AppSettings.hapticsScrollKey: true
+            AppSettings.hapticsScrollKey: true,
+            AppSettings.hapticsIntensityKey: Haptics.Intensity.strong.rawValue
         ])
     }
 

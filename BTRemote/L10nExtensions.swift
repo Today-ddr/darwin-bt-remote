@@ -226,6 +226,22 @@ extension L10n {
             "settings.haptics.hint"
         }
 
+        static var hapticsIntensity: LocalizedStringKey {
+            "settings.haptics.intensity"
+        }
+
+        static var hapticsIntensityLight: LocalizedStringKey {
+            "settings.haptics.intensity.light"
+        }
+
+        static var hapticsIntensityMedium: LocalizedStringKey {
+            "settings.haptics.intensity.medium"
+        }
+
+        static var hapticsIntensityStrong: LocalizedStringKey {
+            "settings.haptics.intensity.strong"
+        }
+
         static var autoAdvertise: LocalizedStringKey {
             "settings.auto_advertise"
         }

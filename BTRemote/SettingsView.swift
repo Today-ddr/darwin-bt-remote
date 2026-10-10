@@ -15,6 +15,7 @@ struct SettingsView: View {
     @AppStorage(AppSettings.hapticsTrackpadKey) private var hapticsTrackpad = true
     @AppStorage(AppSettings.hapticsKeyboardKey) private var hapticsKeyboard = true
     @AppStorage(AppSettings.hapticsScrollKey) private var hapticsScroll = true
+    @AppStorage(AppSettings.hapticsIntensityKey) private var hapticsIntensity = Haptics.Intensity.strong.rawValue
     #if os(iOS)
         @AppStorage(AppSettings.autoAdvertiseKey) private var autoAdvertise = true
     #endif
@@ -57,6 +58,12 @@ struct SettingsView: View {
                 Section(header: Text(L10n.Settings.haptics), footer: Text(L10n.Settings.hapticsHint)) {
                     Toggle(L10n.Settings.hapticsEnabled, isOn: $hapticsEnabled)
                     if hapticsEnabled {
+                        Picker(L10n.Settings.hapticsIntensity, selection: $hapticsIntensity) {
+                            Text(L10n.Settings.hapticsIntensityLight).tag(Haptics.Intensity.light.rawValue)
+                            Text(L10n.Settings.hapticsIntensityMedium).tag(Haptics.Intensity.medium.rawValue)
+                            Text(L10n.Settings.hapticsIntensityStrong).tag(Haptics.Intensity.strong.rawValue)
+                        }
+                        .pickerStyle(.segmented)
                         Toggle(L10n.Settings.hapticsTrackpad, isOn: $hapticsTrackpad)
                         Toggle(L10n.Settings.hapticsScroll, isOn: $hapticsScroll)
                             .disabled(!hapticsTrackpad)
@@ -67,6 +74,11 @@ struct SettingsView: View {
                     if enabled {
                         Haptics.prepare()
                     }
+                }
+                .onChange(of: hapticsIntensity) { _ in
+                    // The new level needs a fresh generator, so warm it up here
+                    // rather than paying the spin-up cost on the first tap.
+                    Haptics.prepare()
                 }
                 Section(header: Text(L10n.Settings.connection), footer: Text(L10n.Settings.autoAdvertiseHint)) {
                     Toggle(L10n.Settings.autoAdvertise, isOn: $autoAdvertise)

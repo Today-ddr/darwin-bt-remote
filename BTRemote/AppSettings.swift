@@ -32,6 +32,8 @@ enum AppSettings {
     static let hapticsTrackpadKey = "BTRemote.hapticsTrackpad"
     static let hapticsKeyboardKey = "BTRemote.hapticsKeyboard"
     static let hapticsScrollKey = "BTRemote.hapticsScroll"
+    /// Raw value of `Haptics.Intensity`; unknown or absent values read as `.strong`.
+    static let hapticsIntensityKey = "BTRemote.hapticsIntensity"
 
     static let maxAdvertisedNameLength = 26
 

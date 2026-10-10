@@ -150,18 +150,37 @@ extension EnvironmentValues {
 /// Trackpad clicks use `.rigid` — Apple's description of that style is "crisp,
 /// rigid", the closest match to the firm detent of a Force Touch click. Scrolling
 /// uses the selection generator, whose rapid tick is what gives the MacBook
-/// trackpad its distinctive texture.
+/// trackpad its distinctive texture. Both scale with the intensity setting, so a
+/// softer setting softens the whole feel rather than one surface.
 ///
 /// Generators are cached and pre-warmed: the Taptic Engine takes a few
 /// milliseconds to spin up, and an unprewarmed first tap is noticeably laggy.
+/// The impact generator's style is fixed at init, so the cache is tagged with
+/// the intensity it was built for and rebuilt when the setting changes.
 enum Haptics {
     enum Source {
         case trackpad
         case keyboard
     }
 
+    /// How firm the feedback feels, persisted as `hapticsIntensityKey`.
+    enum Intensity: String {
+        case light
+        case medium
+        case strong
+
+        /// `.strong` is the original feel, so it is also the fallback for an
+        /// absent or unrecognised stored value.
+        static func from(_ setting: String?) -> Intensity {
+            Intensity(rawValue: setting ?? "") ?? .strong
+        }
+    }
+
     #if os(iOS)
         @MainActor private static var impact: UIImpactFeedbackGenerator?
+        /// The intensity `impact` was created with; `.strong` maps to `.rigid`, so
+        /// a stale generator would silently ignore a change to the setting.
+        @MainActor private static var impactIntensity: Intensity?
         @MainActor private static var selection: UISelectionFeedbackGenerator?
         @MainActor private static var lastScrollTick: CFTimeInterval = 0
         /// Ceiling of ~25 ticks/second, so a fast flick stays crisp instead of buzzing.
@@ -173,7 +192,7 @@ enum Haptics {
     static func tap(from source: Source = .trackpad) {
         #if os(iOS)
             guard isEnabled(source) else { return }
-            let generator = impactGenerator()
+            let generator = impactGenerator(for: intensity)
             generator.impactOccurred()
             generator.prepare()
         #endif
@@ -191,9 +210,18 @@ enum Haptics {
             let now = CACurrentMediaTime()
             guard now - lastScrollTick >= scrollTickInterval else { return }
             lastScrollTick = now
-            let generator = selectionGenerator()
-            generator.selectionChanged()
-            generator.prepare()
+            let level = intensity
+            if let damped = scrollImpactIntensity(for: level) {
+                // The selection generator has no style to soften, so the lighter
+                // levels substitute a damped impact for the bare tick.
+                let generator = impactGenerator(for: level)
+                generator.impactOccurred(intensity: damped)
+                generator.prepare()
+            } else {
+                let generator = selectionGenerator()
+                generator.selectionChanged()
+                generator.prepare()
+            }
         #endif
     }
 
@@ -202,7 +230,7 @@ enum Haptics {
     static func prepare() {
         #if os(iOS)
             guard UserDefaults.standard.bool(forKey: AppSettings.hapticsEnabledKey) else { return }
-            _ = impactGenerator()
+            _ = impactGenerator(for: intensity)
             _ = selectionGenerator()
         #endif
     }
@@ -218,14 +246,49 @@ enum Haptics {
             }
         }
 
+        /// The current intensity, read straight from `UserDefaults` so a change in
+        /// Settings takes effect immediately.
         @MainActor
-        private static func impactGenerator() -> UIImpactFeedbackGenerator {
-            if let impact {
+        private static var intensity: Intensity {
+            Intensity.from(UserDefaults.standard.string(forKey: AppSettings.hapticsIntensityKey))
+        }
+
+        /// Impact style per level: `.rigid` is Apple's "crisp, rigid" description,
+        /// the original feel and so the mapping for `.strong`.
+        @MainActor
+        private static func impactStyle(for level: Intensity) -> UIImpactFeedbackGenerator.FeedbackStyle {
+            switch level {
+            case .light: .light
+            case .medium: .medium
+            case .strong: .rigid
+            }
+        }
+
+        /// Strength of the damped impact that stands in for a scroll tick at the
+        /// softer levels. `nil` means "use the selection generator", which is the
+        /// original tick and therefore the mapping for `.strong` — the selection
+        /// generator has no style or intensity of its own to soften, so the softer
+        /// levels substitute a reduced-intensity impact at the same level's style.
+        @MainActor
+        private static func scrollImpactIntensity(for level: Intensity) -> CGFloat? {
+            switch level {
+            case .light: 0.25
+            case .medium: 0.5
+            case .strong: nil
+            }
+        }
+
+        /// `UIImpactFeedbackGenerator` fixes its style at init, so a cached
+        /// generator built for a different level is discarded rather than reused.
+        @MainActor
+        private static func impactGenerator(for level: Intensity) -> UIImpactFeedbackGenerator {
+            if let impact, impactIntensity == level {
                 return impact
             }
-            let generator = UIImpactFeedbackGenerator(style: .rigid)
+            let generator = UIImpactFeedbackGenerator(style: impactStyle(for: level))
             generator.prepare()
             impact = generator
+            impactIntensity = level
             return generator
         }
 
