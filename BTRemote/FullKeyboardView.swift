@@ -19,11 +19,7 @@ struct FullKeyboardView: View {
     var body: some View {
         GeometryReader { geo in
             let isLandscape = geo.size.width > geo.size.height
-            if isLandscape {
-                landscapeKeyboard(size: geo.size)
-            } else {
-                portraitKeyboard(size: geo.size)
-            }
+            keyboard(size: geo.size, isLandscape: isLandscape)
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 4)
@@ -41,10 +37,18 @@ struct FullKeyboardView: View {
         }
     }
 
-    // MARK: - Landscape Keyboard (6 rows standard layout)
+    // MARK: - Keyboard
 
-    private func landscapeKeyboard(size: CGSize) -> some View {
-        let gap: CGFloat = 5
+    /// One six-row layout for both orientations, so a key sits in the same place
+    /// whichever way the device is held.
+    ///
+    /// The rows are narrower in portrait than in landscape, so the keys are
+    /// necessarily smaller there; they scale to fill the width exactly rather than
+    /// scrolling. A scrolling surface was rejected on purpose: a scroll view delays
+    /// touch delivery and its pan recogniser can cancel a touch that started on a
+    /// key, which is the same class of interruption that used to leave keys latched.
+    private func keyboard(size: CGSize, isLandscape: Bool) -> some View {
+        let gap: CGFloat = isLandscape ? 5 : 4
         let totalRows: CGFloat = 6
         let availableHeight = size.height - (totalRows - 1) * gap
         let keyHeight = min(52, max(28, availableHeight / totalRows))
@@ -61,33 +65,7 @@ struct FullKeyboardView: View {
             size: size,
             gap: gap,
             height: keyHeight,
-            isCompact: false
-        )
-    }
-
-    // MARK: - Portrait Keyboard (8 rows non-scrollable native layout)
-
-    private func portraitKeyboard(size: CGSize) -> some View {
-        let gap: CGFloat = 4
-        let totalRows: CGFloat = 8
-        let availableHeight = size.height - (totalRows - 1) * gap
-        let keyHeight = min(46, max(30, availableHeight / totalRows))
-
-        return keyboardLayout(
-            rows: [
-                (pRow0, 10.0),
-                (pRow1, 10.0),
-                (pRow2, 10.0),
-                (pRow3, 10.0),
-                (pRow4, 9.0),
-                (pRow5, 10.0),
-                (pRow6, 10.0),
-                (pRow7, 10.0)
-            ],
-            size: size,
-            gap: gap,
-            height: keyHeight,
-            isCompact: true
+            isCompact: !isLandscape
         )
     }
 
