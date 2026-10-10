@@ -4240,13 +4240,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "It will be removed from the list and stop receiving your input. Bluetooth can only be disconnected from the other device, so it may still show as connected there."
+            "value": "It will stop receiving your input and will not regain control on its own. Bluetooth can only be disconnected from the other device, so it may still show as connected there."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "它将被移出列表，并且不再接收你的输入。蓝牙断开只能由对方设备发起，因此对方设备上可能仍显示为已连接。"
+            "value": "它将不再接收你的输入，也不会自动恢复控制。蓝牙断开只能由对方设备发起，因此对方设备上可能仍显示为已连接。"
           }
         }
       }
@@ -4315,6 +4315,91 @@
           "stringUnit": {
             "state": "translated",
             "value": "强"
+          }
+        }
+      }
+    },
+    "device.in_use": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Use"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用中"
+          }
+        }
+      }
+    },
+    "device.standby": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standby"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "待命"
+          }
+        }
+      }
+    },
+    "device.removed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Removed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已移除"
+          }
+        }
+      }
+    },
+    "device.use": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use this device"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用此设备"
+          }
+        }
+      }
+    },
+    "device.restore": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "恢复"
           }
         }
       }
