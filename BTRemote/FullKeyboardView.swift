@@ -4,6 +4,21 @@ import SwiftUI
 private let trackpadMinimumHeight: CGFloat = 80
 /// Keeps the embedded touch surface clear of the home indicator and the swipe-up gesture.
 private let trackpadBottomInset: CGFloat = 8
+/// Height the keys settle on once there is room for it. Anything deeper than this below
+/// the rows is left to the trackpad, so the keys stop growing here.
+private let maximumKeyHeight: CGFloat = 52
+/// Shortest a key gets before the keyboard stops scaling down.
+private let minimumKeyHeight: CGFloat = 28
+/// Space kept either side of the keys. The keyboard is allowed into the horizontal safe
+/// area (see `body`), so this margin is what stands between the outermost keys and the
+/// edge of the screen.
+private let keyHorizontalMargin: CGFloat = 8
+/// How far above a cap its press bubble floats, how much taller than the cap the bubble
+/// is, how round its corners are, and how much larger its label is drawn than the cap's.
+private let bubbleGap: CGFloat = 4
+private let bubbleExtraHeight: CGFloat = 12
+private let bubbleCornerRadius: CGFloat = 8
+private let bubbleLabelScale: CGFloat = 1.3
 
 struct FullKeyboardView: View {
     @Environment(\.hid) private var hid
@@ -21,8 +36,14 @@ struct FullKeyboardView: View {
             let isLandscape = geo.size.width > geo.size.height
             keyboard(size: geo.size, isLandscape: isLandscape)
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, keyHorizontalMargin)
         .padding(.vertical, 4)
+        // The keys span the full width of the device. In landscape the horizontal safe
+        // area is some 60pt a side, which left the keyboard as a narrow island with a
+        // wide empty margin on either side of it. Only the horizontal edges are ignored:
+        // the vertical insets stay, so the top row still clears the status bar and the
+        // bottom row still clears the home indicator.
+        .ignoresSafeArea(.container, edges: .horizontal)
         // last line of defence: nothing is touching the surface, so nothing may stay held
         .onChange(of: surfaceTouches.value) { count in
             if count == 0 {
@@ -51,7 +72,18 @@ struct FullKeyboardView: View {
         let gap: CGFloat = isLandscape ? 5 : 4
         let totalRows: CGFloat = 6
         let availableHeight = size.height - (totalRows - 1) * gap
-        let keyHeight = min(52, max(28, availableHeight / totalRows))
+        let idealKeyHeight = availableHeight / totalRows
+        // Keys stop at `maximumKeyHeight` so the trackpad can have the rest, but a strip
+        // left over that is too shallow for the trackpad would just be dead space above
+        // the home indicator; the keys take it back instead. This is where the height
+        // freed by the removed title bar ends up on a device with no room for a trackpad.
+        let leftoverForTrackpad = availableHeight - totalRows * maximumKeyHeight
+        let keyHeight = max(
+            minimumKeyHeight,
+            idealKeyHeight > maximumKeyHeight && leftoverForTrackpad < trackpadMinimumHeight
+                ? idealKeyHeight
+                : min(maximumKeyHeight, idealKeyHeight)
+        )
 
         return keyboardLayout(
             rows: [
@@ -82,8 +114,16 @@ struct FullKeyboardView: View {
 
         return KeyCapTouchSurface(touches: surfaceTouches, onAllTouchesEnded: releaseAllKeys) {
             VStack(spacing: gap) {
-                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                    keyRow(row.0, width: size.width, gap: gap, height: height, totalWeight: row.1, isCompact: isCompact)
+                ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
+                    keyRow(
+                        row.0,
+                        row: rowIndex,
+                        width: size.width,
+                        gap: gap,
+                        height: height,
+                        totalWeight: row.1,
+                        isCompact: isCompact
+                    )
                 }
                 if leftover >= trackpadMinimumHeight {
                     TrackpadPanel(hid: hid, showsControls: false)
@@ -93,10 +133,17 @@ struct FullKeyboardView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
+        // The press bubbles are drawn over the whole keyboard instead of inside the row
+        // that owns the cap: a row clips to its own bounds, and the top row sits against
+        // the top edge of the keyboard, so its bubble has to reach above that row.
+        .overlayPreferenceValue(KeyPressBubblePreference.self) { bubbles in
+            KeyPressBubbleOverlay(bubbles: bubbles)
+        }
     }
 
     private func keyRow(
         _ keys: [FullKeyCap],
+        row rowIndex: Int,
         width: CGFloat,
         gap: CGFloat,
         height: CGFloat,
@@ -107,8 +154,9 @@ struct FullKeyboardView: View {
         let unit = max(0, (width - gaps) / totalWeight)
 
         return HStack(spacing: gap) {
-            ForEach(Array(keys.enumerated()), id: \.offset) { _, key in
+            ForEach(Array(keys.enumerated()), id: \.offset) { column, key in
                 FullKeyCapButton(
+                    id: KeyCapID(row: rowIndex, column: column),
                     key: key,
                     isCompact: isCompact,
                     isArmed: isKeyArmed(key),
@@ -206,7 +254,100 @@ struct FullKeyboardView: View {
     }
 }
 
+// MARK: - Key press bubbles
+
+/// Where a cap sits in the layout. Stable for as long as the page is up, so several
+/// bubbles on screen at once each keep their own identity.
+private struct KeyCapID: Hashable {
+    let row: Int
+    let column: Int
+}
+
+/// A cap that is down right now: what its bubble has to draw, and where the cap is.
+///
+/// The cap publishes one of these while it is pressed and nothing while it is up, so
+/// with nothing held the collection below is empty and there is nothing to draw.
+private struct KeyPressBubble: Identifiable {
+    let id: KeyCapID
+    let label: FullKeyCap.Label
+    let isCompact: Bool
+    let isArmed: Bool
+    let isShiftActive: Bool
+    /// The cap's frame, resolved against the overlay's `GeometryReader`.
+    let anchor: Anchor<CGRect>
+}
+
+/// Gathers the bubble of every cap that is currently down.
+private struct KeyPressBubblePreference: PreferenceKey {
+    static let defaultValue: [KeyPressBubble] = []
+
+    static func reduce(value: inout [KeyPressBubble], nextValue: () -> [KeyPressBubble]) {
+        value.append(contentsOf: nextValue())
+    }
+}
+
+/// Draws a bubble over every cap that is down, the way the system keyboard lifts the
+/// key under a finger.
+///
+/// The bubbles sit in an overlay covering the whole keyboard rather than in the row
+/// that owns the cap: a row would clip them to its own bounds, and the top row is
+/// against the top edge, so its bubble has to reach above it. The overlay is not
+/// clipped, so a bubble is free to draw in the gap between rows or over the row above.
+private struct KeyPressBubbleOverlay: View {
+    let bubbles: [KeyPressBubble]
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .topLeading) {
+                ForEach(bubbles) { bubble in
+                    let cap = geo[bubble.anchor]
+                    let height = cap.height + bubbleExtraHeight
+                    KeyCapBubble(bubble: bubble)
+                        .frame(width: cap.width, height: height)
+                        .position(x: cap.midX, y: bubbleTop(above: cap, height: height) + height / 2)
+                }
+            }
+        }
+        // decoration only: a bubble must never swallow the touch that is holding the
+        // key down, and on macOS it must not take the cap's drag gesture either
+        .allowsHitTesting(false)
+    }
+
+    /// A bubble floats just above its cap; the top row has no room above it, so its
+    /// bubble sits over the cap itself, the way the system keyboard's preview does.
+    private func bubbleTop(above cap: CGRect, height: CGFloat) -> CGFloat {
+        max(0, cap.minY - (height + bubbleGap))
+    }
+}
+
+/// One lifted key: the cap's own label, drawn a little larger, on a rounded rect that
+/// carries the cap's fill, with a soft shadow so it reads as raised.
+private struct KeyCapBubble: View {
+    let bubble: KeyPressBubble
+
+    var body: some View {
+        ZStack {
+            // the cap's fill is translucent, so a bubble needs an opaque backing of its
+            // own: otherwise the rows behind the lifted key would show straight through
+            RoundedRectangle(cornerRadius: bubbleCornerRadius)
+                .fill(.background)
+            RoundedRectangle(cornerRadius: bubbleCornerRadius)
+                .fill(bubble.isArmed ? Color.accentColor : groupFill)
+            KeyCapLabel(
+                label: bubble.label,
+                isCompact: bubble.isCompact,
+                isArmed: bubble.isArmed,
+                isShiftActive: bubble.isShiftActive
+            )
+            .foregroundColor(bubble.isArmed ? .white : .primary)
+            .scaleEffect(bubbleLabelScale)
+        }
+        .shadow(color: .black.opacity(0.25), radius: 4, x: 0, y: 2)
+    }
+}
+
 private struct FullKeyCapButton: View {
+    let id: KeyCapID
     let key: FullKeyCap
     let isCompact: Bool
     let isArmed: Bool
@@ -232,12 +373,27 @@ private struct FullKeyCapButton: View {
             RoundedRectangle(cornerRadius: 6)
                 .fill(isArmed ? Color.accentColor : groupFill)
                 .allowsHitTesting(false)
-            keyContent
+            KeyCapLabel(label: key.label, isCompact: isCompact, isArmed: isArmed, isShiftActive: isShiftActive)
                 .foregroundColor(isArmed ? .white : .primary)
                 .allowsHitTesting(false)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .opacity(pressedKey != nil ? 0.6 : 1)
+        // Only the cap that is down publishes its frame, so an idle keyboard sends the
+        // overlay an empty list and nothing is drawn.
+        .anchorPreference(key: KeyPressBubblePreference.self, value: .bounds) { anchor in
+            guard pressedKey != nil else { return [] }
+            return [
+                KeyPressBubble(
+                    id: id,
+                    label: key.label,
+                    isCompact: isCompact,
+                    isArmed: isArmed,
+                    isShiftActive: isShiftActive,
+                    anchor: anchor
+                )
+            ]
+        }
         .onDisappear { releaseIfStranded() }
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(.isButton)
@@ -275,10 +431,18 @@ private struct FullKeyCapButton: View {
         surfaceTouches.touchUp()
         release()
     }
+}
 
-    @ViewBuilder
-    private var keyContent: some View {
-        switch key.label {
+/// The label on a key cap. Shared with the press bubble so a lifted key shows the label
+/// of the key it came from, and follows the shift state the cap is showing.
+private struct KeyCapLabel: View {
+    let label: FullKeyCap.Label
+    let isCompact: Bool
+    let isArmed: Bool
+    let isShiftActive: Bool
+
+    var body: some View {
+        switch label {
         case let .text(str):
             Text(str)
                 .font(.system(size: isCompact ? 11 : 13, weight: .medium))

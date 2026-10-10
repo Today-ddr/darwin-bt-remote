@@ -89,7 +89,9 @@ struct KeyboardView: View {
             .accessibilityLabel("Toggle Onscreen Keyboard")
         }
         .padding(.horizontal, 8)
-        .padding(.top, 4)
+        // no top padding: this page has no title bar above the switcher, so the
+        // switcher sits against the top edge and the keyboard gets the height back
+        .padding(.top, 0)
     }
 
     @ViewBuilder

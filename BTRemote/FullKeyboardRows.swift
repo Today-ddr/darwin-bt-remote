@@ -97,14 +97,15 @@ extension FullKeyboardView {
         ]
     }
 
+    /// Ctrl / Cmd / Opt on the left, the three arrows on the right, and Space holding
+    /// everything in between. The right-hand Opt and Ctrl are gone and their width is
+    /// Space's: 1.3 + 1.2 + 1.2 + 7.8 + 1.16 + 1.16 + 1.18 = 15.0.
     var row5: [FullKeyCap] {
         [
             FullKeyCap(.modifier(name: "Ctrl", symbol: "⌃", mod: .leftCtrl), weight: 1.3, L10n.Keyboard.ctrl, .modifier(.leftCtrl)),
             FullKeyCap(.modifier(name: "Cmd", symbol: "⌘", mod: .leftGUI), weight: 1.2, L10n.Keyboard.meta, .modifier(.leftGUI)),
             FullKeyCap(.modifier(name: "Opt", symbol: "⌥", mod: .leftAlt), weight: 1.2, L10n.Keyboard.alt, .modifier(.leftAlt)),
-            FullKeyCap(.text("Space"), weight: 5.3, L10n.Keyboard.space, .key(.space)),
-            FullKeyCap(.modifier(name: "Opt", symbol: "⌥", mod: .rightAlt), weight: 1.2, L10n.Keyboard.alt, .modifier(.rightAlt)),
-            FullKeyCap(.modifier(name: "Ctrl", symbol: "⌃", mod: .rightCtrl), weight: 1.3, L10n.Keyboard.ctrl, .modifier(.rightCtrl)),
+            FullKeyCap(.text("Space"), weight: 7.8, L10n.Keyboard.space, .key(.space)),
             FullKeyCap(.symbol("arrow.left", ""), weight: 1.16, L10n.Keyboard.left, .key(.leftArrow)),
             FullKeyCap(.symbol("arrow.down", ""), weight: 1.16, L10n.Keyboard.down, .key(.downArrow)),
             FullKeyCap(.symbol("arrow.right", ""), weight: 1.18, L10n.Keyboard.right, .key(.rightArrow))
