@@ -7,12 +7,20 @@
     /// 1-finger tap: left-clicks
     /// 2-finger tap: right-clicks
     /// 2-finger drag: scrolls (supports direction inversion)
-    /// 2-finger pinch: zoom (in/out)
+    /// Two-finger pinch: zoom (in/out)
     /// 2-finger rotation: rotate gesture
     /// 3-finger swipe: up, down, left, right mapped actions
     /// 3-finger tap: mapped action
     /// 4-finger swipe: up, down, left, right mapped actions
     /// 4-finger tap: mapped action
+    ///
+    /// Ownership rule: scroll, pinch and rotation all key off two fingers, yet
+    /// only one of them may act on a given pair of touches. A two-finger pan
+    /// claims the touches as soon as it begins and keeps them until every touch
+    /// lifts; a pinch (or rotation) may claim them only while no pan is live and
+    /// only once its finger separation has changed enough, for long enough, to be
+    /// unmistakably a pinch. First claim wins and is never stolen mid-flight, so
+    /// an accidental pinch can no longer interrupt a scroll. See `Coordinator`.
     struct TouchpadView: UIViewRepresentable {
         var moveSensitivity: CGFloat
         var scrollSensitivity: CGFloat
@@ -162,7 +170,123 @@
             private var lastTapTime: TimeInterval = 0
             private var lastTapLocation: CGPoint = .zero
             private var isDragging = false
-            private var isPinching = false
+
+            // MARK: Two-finger ownership
+
+            /// Which two-finger gesture owns the touches right now. Resolved from
+            /// state rather than stored as a claim, so it can never go stale.
+            private enum TwoFingerOwner {
+                case idle
+                case scroll
+                case pinch
+            }
+
+            /// How far the mean finger separation must move, relative to the
+            /// separation at the start of the pinch, before the gesture may be
+            /// taken as a pinch. Two fingers sliding together across the surface
+            /// change their separation by well under 2%, so this is far outside
+            /// anything a two-finger scroll produces, while an intentional spread
+            /// clears it within a few millimetres of travel.
+            private static let pinchLatchRatio: CGFloat = 0.06
+            /// …and it must be *sustained*: this many consecutive pinch updates
+            /// have to clear the threshold before the pinch may take the touches.
+            /// A momentary separation blip cannot latch it.
+            private static let pinchLatchEvents = 3
+            /// Separation change below which an update counts as noise and resets
+            /// the run, so the decisive updates have to be consecutive.
+            private static let pinchNoiseRatio: CGFloat = 0.015
+            /// Mean separation of the touches at the start of the pinch. Measured
+            /// from the absolute touch positions rather than `pinch.scale`, which
+            /// is relative to the previous read and gets reset as zoom is emitted.
+            private var pinchBaselineSeparation: CGFloat?
+            private var pinchLatchStreak = 0
+            /// Set once the latching run completes, and held for the rest of the
+            /// gesture: the moment a pinch has proved itself it owns the touches.
+            private var pinchHasLatched = false
+
+            // MARK: Ownership
+
+            /// True while a two-finger pan is running — i.e. while the touches have
+            /// been recognised as a scroll.
+            private var isScrolling: Bool {
+                guard let pan = scrollRecognizer else { return false }
+                return pan.state == .began || pan.state == .changed
+            }
+
+            /// The ownership rule, in one place:
+            ///
+            /// 1. Whichever gesture proves itself first owns the touches, and
+            ///    keeps them until every touch lifts. A pan proves itself by
+            ///    beginning (finger travel); a pinch proves itself by sustaining a
+            ///    separation change (`pinchLatchEvents` consecutive updates past
+            ///    `pinchLatchRatio`).
+            /// 2. Nothing may take the touches from a gesture that already owns
+            ///    them, so a scroll can no longer be interrupted by an accidental
+            ///    pinch, and a deliberate pinch can no longer be interrupted by
+            ///    the slight drift of two fingers.
+            /// 3. While the owner is still undecided, nothing acts on the touches.
+            ///
+            /// The latching run is frozen while a pan is running, so a scroll can
+            /// never accumulate its way into a pinch: the freeze is what makes
+            /// "first to prove itself wins" safe in both directions.
+            private func twoFingerOwner() -> TwoFingerOwner {
+                if pinchHasLatched {
+                    return .pinch
+                }
+                if isScrolling {
+                    return .scroll
+                }
+                return .idle
+            }
+
+            /// Mean distance of the touches from their own centre — the radius of
+            /// the finger spread. Translation-invariant, so two fingers scrolling
+            /// leave it unchanged while a pinch moves it directly.
+            private func averageSeparation(_ gestureRecognizer: UIGestureRecognizer) -> CGFloat? {
+                guard let view = gestureRecognizer.view else { return nil }
+                let points = (0 ..< gestureRecognizer.numberOfTouches).map { gestureRecognizer.location(ofTouch: $0, in: view) }
+                guard !points.isEmpty else { return nil }
+                let centre = points.reduce(CGPoint.zero) { CGPoint(x: $0.x + $1.x, y: $0.y + $1.y) }
+                let mean = CGPoint(x: centre.x / CGFloat(points.count), y: centre.y / CGFloat(points.count))
+                let sum = points.reduce(CGFloat.zero) { $0 + hypot($1.x - mean.x, $1.y - mean.y) }
+                return sum / CGFloat(points.count)
+            }
+
+            /// Advances the pinch latch, and answers whether the pinch may act.
+            /// Nothing accumulates while a pan is live, so no amount of
+            /// two-finger scrolling can ever latch a pinch.
+            private func pinchIsSustained(_ pinch: UIPinchGestureRecognizer) -> Bool {
+                if pinchHasLatched {
+                    return true
+                }
+                guard !isScrolling else { return false }
+                // Exactly two fingers: three- and four-finger swipes are mapped to
+                // their own actions and must not also latch a zoom.
+                guard pinch.numberOfTouches == 2 else { return false }
+                guard let separation = averageSeparation(pinch) else { return false }
+                if pinchBaselineSeparation == nil {
+                    pinchBaselineSeparation = separation
+                }
+                guard let baseline = pinchBaselineSeparation, baseline > 1 else { return false }
+                let change = abs(separation / baseline - 1)
+                if change > Self.pinchLatchRatio {
+                    pinchLatchStreak += 1
+                } else if change < Self.pinchNoiseRatio {
+                    pinchLatchStreak = 0
+                }
+                pinchHasLatched = pinchLatchStreak >= Self.pinchLatchEvents
+                return pinchHasLatched
+            }
+
+            /// Ends the two-finger gesture outright — no lingering lock-out. The
+            /// old code held a flag for 150ms after the fingers lifted, which is
+            /// what made the surface feel stuck between gestures.
+            private func endTwoFingerGesture() {
+                scrollAccumulator = 0
+                pinchBaselineSeparation = nil
+                pinchLatchStreak = 0
+                pinchHasLatched = false
+            }
 
             @objc func handleMove(_ pan: UIPanGestureRecognizer) {
                 guard let view = pan.view else { return }
@@ -198,59 +322,76 @@
             }
 
             @objc func handleScroll(_ pan: UIPanGestureRecognizer) {
-                guard let view = pan.view, !isPinching else { return }
-                if pan.state == .began { scrollAccumulator = 0 }
-                scrollAccumulator += pan.translation(in: view).y
-                pan.setTranslation(.zero, in: view)
-                let step = scrollStep / max(scrollSensitivity, 0.1)
-                while abs(scrollAccumulator) >= step {
-                    let baseWheel: Int8 = scrollAccumulator > 0 ? -1 : 1
-                    let finalWheel: Int8 = invertScroll ? -baseWheel : baseWheel
-                    onScroll(finalWheel)
-                    scrollAccumulator -= scrollAccumulator > 0 ? step : -step
-                    // One detent per emitted wheel step; Haptics throttles the rate.
-                    Haptics.scrollTick()
-                }
-            }
-
-            @objc func handlePinch(_ pinch: UIPinchGestureRecognizer) {
-                switch pinch.state {
+                guard let view = pan.view else { return }
+                switch pan.state {
                 case .began:
-                    isPinching = true
                     scrollAccumulator = 0
                 case .changed:
-                    isPinching = true
-                    let delta = pinch.scale - 1.0
-                    if abs(delta) > 0.04 {
-                        onZoom(delta)
-                        pinch.scale = 1.0
+                    // A pinch that latched first owns the touches, so the pan that
+                    // drifts alongside it must not also scroll. The translation is
+                    // still cleared so nothing is delivered late if the pan
+                    // outlives the pinch.
+                    guard twoFingerOwner() != .pinch else {
+                        pan.setTranslation(.zero, in: view)
+                        return
+                    }
+                    scrollAccumulator += pan.translation(in: view).y
+                    pan.setTranslation(.zero, in: view)
+                    let step = scrollStep / max(scrollSensitivity, 0.1)
+                    while abs(scrollAccumulator) >= step {
+                        let baseWheel: Int8 = scrollAccumulator > 0 ? -1 : 1
+                        let finalWheel: Int8 = invertScroll ? -baseWheel : baseWheel
+                        onScroll(finalWheel)
+                        scrollAccumulator -= scrollAccumulator > 0 ? step : -step
+                        // One detent per emitted wheel step; Haptics throttles the rate.
+                        Haptics.scrollTick()
                     }
                 case .ended, .cancelled:
-                    Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 150_000_000)
-                        self.isPinching = false
-                    }
+                    endTwoFingerGesture()
                 default:
                     break
                 }
             }
 
+            /// Zoom only, and never before the pinch has sustained its separation
+            /// change and taken the touches from the undecided case. The delta is
+            /// the change in spread since the pinch began, as a fraction of it:
+            /// absolute, so the zoom rate follows the fingers rather than how
+            /// often pinch updates happen to be delivered.
+            @objc func handlePinch(_ pinch: UIPinchGestureRecognizer) {
+                switch pinch.state {
+                case .began:
+                    pinchBaselineSeparation = averageSeparation(pinch)
+                    pinchLatchStreak = 0
+                case .changed:
+                    guard pinchIsSustained(pinch) else { return }
+                    guard let baseline = pinchBaselineSeparation, baseline > 1, let separation = averageSeparation(pinch) else { return }
+                    let delta = separation / baseline - 1
+                    if abs(delta) > 0.02, twoFingerOwner() == .pinch {
+                        onZoom(delta)
+                    }
+                case .ended, .cancelled:
+                    endTwoFingerGesture()
+                default:
+                    break
+                }
+            }
+
+            /// Rotation is the last resort for two-finger touches: it acts only
+            /// when no pan has begun and no pinch has latched.
             @objc func handleRotation(_ rot: UIRotationGestureRecognizer) {
                 switch rot.state {
                 case .began:
-                    isPinching = true
+                    rot.rotation = 0
                 case .changed:
-                    isPinching = true
+                    guard rot.numberOfTouches == 2, twoFingerOwner() == .idle else { return }
                     let delta = rot.rotation
                     if abs(delta) > 0.25 {
                         onRotate(delta)
                         rot.rotation = 0
                     }
                 case .ended, .cancelled:
-                    Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 150_000_000)
-                        self.isPinching = false
-                    }
+                    endTwoFingerGesture()
                 default:
                     break
                 }
@@ -359,6 +500,13 @@
                 }
             }
 
+            /// Simultaneous recognition stays allowed, because the two-finger
+            /// gestures genuinely need it: a pinch cannot latch a sustained
+            /// separation change unless it keeps receiving updates while it is
+            /// undecided, and it cannot do that if a pan alongside it has shut it
+            /// down. Ownership is therefore decided by the rule in
+            /// `twoFingerOwner()`, which all three handlers consult — not by
+            /// refusing gestures here.
             nonisolated func gestureRecognizer(
                 _ gestureRecognizer: UIGestureRecognizer,
                 shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer

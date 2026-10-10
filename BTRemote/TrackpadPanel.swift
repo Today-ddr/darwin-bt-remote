@@ -24,7 +24,6 @@ struct TrackpadPanel: View {
                     scrollColumn.frame(width: 46)
                 }
                 .frame(maxHeight: .infinity)
-                mouseButtonsRow.frame(height: 52)
             } else {
                 surface
             }
@@ -114,33 +113,28 @@ struct TrackpadPanel: View {
     private var scrollColumn: some View {
         VStack(spacing: cellGap) {
             scrollButton("arrow.up", L10n.Mouse.wheelUp, scrollAmount)
+            middleButton
             scrollButton("arrow.down", L10n.Mouse.wheelDown, -scrollAmount)
         }
     }
 
-    private var mouseButtonsRow: some View {
-        HStack(spacing: cellGap) {
-            mouseButton(.left, L10n.Mouse.leftButton)
-            mouseButton(.middle, L10n.Mouse.middleButton)
-            mouseButton(.right, L10n.Mouse.rightButton)
-        }
-    }
-
-    private func mouseButton(_ button: MouseButtons, _ label: LocalizedStringKey) -> some View {
+    /// Middle click, held down for as long as the button is pressed just like
+    /// the pointer buttons it used to sit beside.
+    private var middleButton: some View {
         HoldButton(
             onPress: {
-                activeButtons.insert(button)
+                activeButtons.insert(.middle)
                 hid.sendMouse(MouseReport(buttons: activeButtons))
             },
             onRelease: {
-                activeButtons.remove(button)
+                activeButtons.remove(.middle)
                 hid.sendMouse(MouseReport(buttons: activeButtons))
             },
             hapticSource: .trackpad,
             background: { RoundedRectangle(cornerRadius: 12).fill(groupFill) },
-            label: { Color.clear }
+            label: { Image(systemName: "computermouse").font(.body) }
         )
-        .accessibilityLabel(label)
+        .accessibilityLabel(L10n.Mouse.middleButton)
     }
 
     private func scrollButton(_ icon: String, _ label: LocalizedStringKey, _ wheel: Int8) -> some View {
