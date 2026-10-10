@@ -14,13 +14,16 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// broadcasts skip inactive hosts
     @Published private(set) var inactiveCentrals: Set<UUID> = []
     @Published private(set) var connectedCentrals: Set<UUID> = []
+    /// the one host that currently receives input. Control is sticky: a host keeps it while
+    /// it is away, so the host that reconnects can never take it from one that holds it.
+    @Published private(set) var activeCentral: UUID?
     @Published private(set) var keyboardLEDs: KeyboardLEDs = []
     @Published private(set) var lastError: String?
     @Published private(set) var batteryLevel: UInt8 = 100
 
     private var centralObjects: [UUID: CBCentral] = [:]
     /// hosts the user removed from the list; they stay linked at the Bluetooth level
-    /// but receive nothing until they unsubscribe, which clears the block.
+    /// but receive nothing until the user restores them.
     private var blockedCentrals: Set<UUID> = []
 
     var advertiseLocalName: String = UserDefaults.standard.string(forKey: AppSettings.advertisedNameKey) ?? L10n.Bluetooth.advertisedName
@@ -55,7 +58,12 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// parked one, so a key-up waiting on the send queue was silently replaced by a mouse
     /// move or a battery update and never reached the host — which then repeated the key
     /// forever because it still believed the key was held.
-    private var pendingBroadcasts: [UInt8: (Data, CBMutableCharacteristic)] = [:]
+    ///
+    /// Each entry also remembers the host it was addressed to. Only one host receives input
+    /// at a time, so anything still queued at a switch belongs to the host that just lost
+    /// control and is dropped rather than replayed on the new one; the report of the new
+    /// active host that could not be sent is parked on its own turn.
+    private var pendingBroadcasts: [UInt8: (data: Data, char: CBMutableCharacteristic, target: UUID?)] = [:]
 
     func start() {
         isHIDServiceAllowed = true
@@ -108,6 +116,7 @@ final class HIDPeripheral: NSObject, ObservableObject {
         connectedCentrals.removeAll()
         centralObjects.removeAll()
         blockedCentrals.removeAll()
+        activeCentral = nil
     }
 
     func sendMouse(_ report: MouseReport) {
@@ -140,24 +149,64 @@ final class HIDPeripheral: NSObject, ObservableObject {
         }
     }
 
-    /// Remove a host from the connected list and stop sending it input.
+    /// Stop sending input to a host until the user restores it.
     ///
     /// CoreBluetooth exposes no way for a peripheral to drop a single central —
     /// `CBPeripheralManager` has no counterpart to `cancelPeripheralConnection`,
     /// and removing the service does not notify the peer (it only makes this side
-    /// lose track of its subscribers). So the link survives, but the host is
-    /// blocked from `activeRecipients()` and hidden from the list. The block
-    /// clears on unsubscribe or reconnect, so a host that re-subscribes
-    /// deliberately can come back.
+    /// lose track of its subscribers). So the link itself survives and the host stays
+    /// in the connected list, marked as removed. There it receives nothing until the
+    /// user restores it: the block outlives unsubscribes and reconnects, so a host
+    /// that comes back on its own does not get a second chance at the input.
     func removeCentral(_ uuid: UUID) {
+        // release before the host is cut off: a key-up sent afterwards goes nowhere, and
+        // the host would be left holding whatever was down when control was taken away
+        let wasActive = activeCentral == uuid
+        if wasActive {
+            _releaseHeldKeys()
+            activeCentral = nil
+        }
         blockedCentrals.insert(uuid)
         inactiveCentrals.remove(uuid)
-        centralObjects.removeValue(forKey: uuid)
         objectWillChange.send()
     }
 
     func isBlocked(_ uuid: UUID) -> Bool {
         blockedCentrals.contains(uuid)
+    }
+
+    /// Undo `removeCentral`. A host that is still subscribed is ready to be switched to;
+    /// one that is not is eligible to claim control when it next subscribes, provided
+    /// nothing holds it by then (see the claim in `didSubscribeTo`).
+    func restoreCentral(_ uuid: UUID) {
+        blockedCentrals.remove(uuid)
+        objectWillChange.send()
+    }
+
+    /// Make a subscribed, unblocked host the one that receives input, replacing whatever
+    /// held control — no reconnecting needed, the hosts stay linked throughout.
+    ///
+    /// Keys that are still down are released before the input is rerouted, so the host
+    /// losing control is not left with a latched key.
+    func makeActive(_ uuid: UUID) {
+        guard subscribedCentrals[uuid] != nil,
+              !blockedCentrals.contains(uuid),
+              activeCentral != uuid
+        else { return }
+        // the host losing control is told that nothing is held any more, and the new one
+        // starts from the same quiet baseline rather than whatever it last knew
+        _releaseHeldKeys()
+        activeCentral = uuid
+        _releaseHeldKeys()
+        _trace("active host: \(uuid)")
+    }
+
+    /// Releases everything a host could be holding. One zeroed report covers all of it:
+    /// whether the key was pressed through the combo pages, the full keyboard or the
+    /// direct-input capture, the keyboard state lives in one report, and clearing that is
+    /// what tells the host nothing is down any more.
+    private func _releaseHeldKeys() {
+        sendKeyboard(.zero)
     }
 
     func updateBatteryLevel(_ level: UInt8) {
@@ -401,16 +450,16 @@ final class HIDPeripheral: NSObject, ObservableObject {
     private func updateValue(_ data: Data, for char: CBMutableCharacteristic, reportID: UInt8? = nil) -> Bool {
         guard let pManager else { return false }
         let recipients = activeRecipients()
-        guard !recipients.isEmpty else { return false }
+        guard let target = activeCentral, !recipients.isEmpty else { return false }
         if !isReadyToSendNotification {
-            park(data, for: char, reportID: reportID)
+            park(data, for: char, reportID: reportID, target: target)
             return false
         }
         let accepted = pManager.updateValue(data, for: char, onSubscribedCentrals: recipients)
         if !accepted {
             // the queue is full: keep this report, replacing only an older one of its own kind
             isReadyToSendNotification = false
-            park(data, for: char, reportID: reportID)
+            park(data, for: char, reportID: reportID, target: target)
         }
         return accepted
     }
@@ -418,20 +467,28 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// Parks a report that could not be sent, keyed by report ID. Where the ID is unknown the
     /// characteristic stands in for it, so an unidentified report still cannot overwrite one
     /// from another characteristic.
-    private func park(_ data: Data, for char: CBMutableCharacteristic, reportID id: UInt8?) {
-        pendingBroadcasts[id ?? reportID(forCharacteristic: char) ?? 0xF0] = (data, char)
+    private func park(_ data: Data, for char: CBMutableCharacteristic, reportID id: UInt8?, target: UUID?) {
+        pendingBroadcasts[id ?? reportID(forCharacteristic: char) ?? 0xF0] = (data, char, target)
     }
 
-    /// Re-sends every parked report, oldest first. Nothing here can drop one on the floor:
-    /// a report that fails again simply stays parked, and each ID is drained independently,
-    /// so no report type can evict another.
+    /// Re-sends every parked report, oldest first. A report that fails again simply stays
+    /// parked, and each ID is drained independently, so no report type can evict another.
+    /// Only one host receives input, so a report parked by the host that lost control in
+    /// the meantime is dropped rather than delivered to its replacement.
     private func drainPendingBroadcasts() {
         guard !pendingBroadcasts.isEmpty, let pManager else { return }
         for id in pendingBroadcasts.keys.sorted() {
-            guard let (data, char) = pendingBroadcasts[id] else { continue }
+            guard let entry = pendingBroadcasts[id] else { continue }
+            // a report left over from a previous host is dropped: the host it was written
+            // for no longer receives input. Congestion is left to report itself below, so
+            // nothing is discarded while the active host is merely muted or away.
+            guard entry.target == activeCentral else {
+                pendingBroadcasts.removeValue(forKey: id)
+                continue
+            }
             let recipients = activeRecipients()
             guard !recipients.isEmpty else { return }
-            if pManager.updateValue(data, for: char, onSubscribedCentrals: recipients) {
+            if pManager.updateValue(entry.data, for: entry.char, onSubscribedCentrals: recipients) {
                 pendingBroadcasts.removeValue(forKey: id)
             } else {
                 // still congested: leave this one and everything after it parked
@@ -454,10 +511,20 @@ final class HIDPeripheral: NSObject, ObservableObject {
         _trace("central tracked: \(central.identifier)")
     }
 
+    /// Hosts that may receive input right now: the one active host, and only it.
+    ///
+    /// Every other subscriber stays linked at the Bluetooth level and receives nothing —
+    /// a peripheral cannot drop one, so exclusivity here means exclusive *input*, not
+    /// exclusive connection. Muting is a separate filter on top of that: it suppresses
+    /// the active host's input without giving control to anyone else.
     private func activeRecipients() -> [CBCentral] {
-        subscribedCentrals.keys
-            .filter { !inactiveCentrals.contains($0) && !blockedCentrals.contains($0) }
-            .compactMap { centralObjects[$0] }
+        guard let activeCentral,
+              subscribedCentrals[activeCentral] != nil,
+              !inactiveCentrals.contains(activeCentral),
+              !blockedCentrals.contains(activeCentral),
+              let central = centralObjects[activeCentral]
+        else { return [] }
+        return [central]
     }
 
     private func reportID(forCharacteristic char: CBCharacteristic) -> UInt8? {
@@ -529,10 +596,19 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
         didSubscribeTo characteristic: CBCharacteristic
     ) {
         _trackInteraction(from: central)
-        // a fresh subscribe is a deliberate action by the host, so let it back in
-        blockedCentrals.remove(central.identifier)
         subscribedCentrals[central.identifier, default: []].insert(characteristic.uuid)
+        // subscribing is how a host reconnects, not a user action, so it carries no claim
+        // to control: the first host claims an idle app, and after that only the user
+        // switches. A host whose block survives the reconnect is not eligible at all.
+        if activeCentral == nil, !blockedCentrals.contains(central.identifier) {
+            activeCentral = central.identifier
+            _trace("active host: \(central.identifier) (first claim)")
+        }
         _trace("subscribe: \(central.identifier) -> \(characteristic.uuid)")
+        // current state is brought up to date only for the host that receives input: on a
+        // master report the characteristic header carries no central, so a replay would
+        // otherwise be broadcast to the active host whichever host had subscribed
+        guard activeCentral == central.identifier else { return }
         if let id = reportID(forCharacteristic: characteristic),
            let cached = cachedReports[id],
            let char = charsByReportID[id]
@@ -560,6 +636,11 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
             centralObjects.removeValue(forKey: central.identifier)
             inactiveCentrals.remove(central.identifier)
             connectedCentrals.remove(central.identifier)
+            // a host that is gone cannot be the one receiving input, but one that was
+            // removed keeps its block, so its reconnect still lands on a standby row
+            if activeCentral == central.identifier {
+                activeCentral = nil
+            }
             serviceChangedArmed = false
         } else {
             subscribedCentrals[central.identifier] = chars

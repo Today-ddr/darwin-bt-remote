@@ -93,7 +93,9 @@ struct DeviceListView: View {
                     isCentralConnected: central.connected.contains(peripheral.id),
                     isConnecting: central.connecting.contains(peripheral.id),
                     isSubscribed: false,
-                    isActive: true
+                    isActive: true,
+                    isMuted: false,
+                    isRemoved: false
                 )
             }
             .sorted(by: _isOrderedBefore)

@@ -217,10 +217,10 @@ struct SetupView: View {
         }
     }
 
-    /// hosts that connected to us (peripheral role); subscribed ones can receive input
+    /// Hosts that connected to us (peripheral role), removed ones included: they stay
+    /// linked at the Bluetooth level, so the row is where the user gets them back.
     private var _connectedDevices: [DeviceEntry] {
         lowEnergy.connectedCentrals
-            .filter { !lowEnergy.isBlocked($0) }
             .map { uuid in
                 let alias = names.name(for: uuid)
                 let subscribed = lowEnergy.subscribedCentrals.keys.contains(uuid)
@@ -237,7 +237,9 @@ struct SetupView: View {
                     isCentralConnected: false,
                     isConnecting: false,
                     isSubscribed: subscribed,
-                    isActive: subscribed && !lowEnergy.inactiveCentrals.contains(uuid)
+                    isActive: subscribed && lowEnergy.activeCentral == uuid,
+                    isMuted: lowEnergy.inactiveCentrals.contains(uuid),
+                    isRemoved: lowEnergy.isBlocked(uuid)
                 )
             }
             .sorted { $0.id.uuidString < $1.id.uuidString }
@@ -277,7 +279,9 @@ struct SetupView: View {
             onRemove: {
                 pendingRemoval = entry
                 showRemoveConfirm = true
-            }
+            },
+            onUse: { lowEnergy.makeActive(entry.id) },
+            onRestore: { lowEnergy.restoreCentral(entry.id) }
         )
     }
 
