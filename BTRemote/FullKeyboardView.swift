@@ -13,6 +13,8 @@ struct FullKeyboardView: View {
     /// Keys currently down, so a release reports the union of what is left pressed
     /// instead of clearing the whole keyboard.
     @State private var heldKeys: Set<Keycode> = []
+    /// Fingers on the key surface, shared with every per-key touch layer.
+    @State private var surfaceTouches = KeyTouchCount()
 
     var body: some View {
         GeometryReader { geo in
@@ -25,6 +27,12 @@ struct FullKeyboardView: View {
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 4)
+        // last line of defence: nothing is touching the surface, so nothing may stay held
+        .onChange(of: surfaceTouches.value) { count in
+            if count == 0 {
+                releaseAllKeys()
+            }
+        }
         .onDisappear { releaseAllKeys() }
         .onChange(of: scenePhase) { phase in
             if phase != .active {
@@ -94,17 +102,19 @@ struct FullKeyboardView: View {
         let rowsHeight = CGFloat(rows.count) * height + CGFloat(max(rows.count - 1, 0)) * gap
         let leftover = size.height - rowsHeight
 
-        return VStack(spacing: gap) {
-            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                keyRow(row.0, width: size.width, gap: gap, height: height, totalWeight: row.1, isCompact: isCompact)
+        return KeyCapTouchSurface(touches: surfaceTouches, onAllTouchesEnded: releaseAllKeys) {
+            VStack(spacing: gap) {
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    keyRow(row.0, width: size.width, gap: gap, height: height, totalWeight: row.1, isCompact: isCompact)
+                }
+                if leftover >= trackpadMinimumHeight {
+                    TrackpadPanel(hid: hid, showsControls: false)
+                        .frame(maxHeight: .infinity)
+                        .padding(.bottom, trackpadBottomInset)
+                }
             }
-            if leftover >= trackpadMinimumHeight {
-                TrackpadPanel(hid: hid, showsControls: false)
-                    .frame(maxHeight: .infinity)
-                    .padding(.bottom, trackpadBottomInset)
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private func keyRow(
@@ -125,6 +135,7 @@ struct FullKeyboardView: View {
                     isCompact: isCompact,
                     isArmed: isKeyArmed(key),
                     isShiftActive: isShiftActive,
+                    surfaceTouches: surfaceTouches,
                     onPress: { handlePress(key) },
                     onRelease: { handleRelease(key) }
                 )
@@ -222,38 +233,69 @@ private struct FullKeyCapButton: View {
     let isCompact: Bool
     let isArmed: Bool
     let isShiftActive: Bool
+    let surfaceTouches: KeyTouchCount
     let onPress: () -> Void
     let onRelease: () -> Void
 
-    @State private var pressed = false
+    /// Held only while a finger on this cap is down. `key` stays a value type so a key can
+    /// never be stale across the `@State` snapshot, but the flag is dropped the moment the
+    /// view carrying it goes away — see `releaseIfStranded`.
+    @State private var pressedKey: FullKeyCap?
 
     var body: some View {
         ZStack {
+            #if os(iOS)
+                KeyCapTouchView(
+                    touches: surfaceTouches,
+                    onFirstTouch: press,
+                    onLastTouch: release
+                )
+            #endif
             RoundedRectangle(cornerRadius: 6)
                 .fill(isArmed ? Color.accentColor : groupFill)
+                .allowsHitTesting(false)
             keyContent
                 .foregroundColor(isArmed ? .white : .primary)
+                .allowsHitTesting(false)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .opacity(pressed ? 0.6 : 1)
-        .contentShape(Rectangle())
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    if !pressed {
-                        pressed = true
-                        Haptics.tap(from: .keyboard)
-                        onPress()
-                    }
-                }
-                .onEnded { _ in
-                    if pressed {
-                        pressed = false
-                        onRelease()
-                    }
-                }
-        )
+        .opacity(pressedKey != nil ? 0.6 : 1)
+        .onDisappear { releaseIfStranded() }
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isButton)
         .accessibilityLabel(key.accessibility)
+        #if !os(iOS)
+            // macOS keeps the previous press/release gesture: this page only sees touch
+            // input on iOS, where the layer inside the ZStack replaces it.
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in press() }
+                    .onEnded { _ in release() }
+            )
+        #endif
+    }
+
+    private func press() {
+        guard pressedKey == nil else { return }
+        pressedKey = key
+        Haptics.tap(from: .keyboard)
+        onPress()
+    }
+
+    private func release() {
+        guard pressedKey != nil else { return }
+        pressedKey = nil
+        onRelease()
+    }
+
+    /// Called from `onDisappear`, which is also the last callback a view gets while it is
+    /// being torn down: `onRelease` still reports through a live closure, the visual state
+    /// going with the view cannot latch anything, and the count below still names the finger
+    /// that was on this cap so the surface total does not drift.
+    private func releaseIfStranded() {
+        guard pressedKey != nil else { return }
+        surfaceTouches.touchUp()
+        release()
     }
 
     @ViewBuilder

@@ -51,7 +51,11 @@ final class HIDPeripheral: NSObject, ObservableObject {
         ReportID.digitizer.rawValue: DigitizerReport.zero.data
     ]
 
-    private var pendingBroadcast: (Data, CBMutableCharacteristic)?
+    /// One parked payload per report ID. A single shared slot let any later report evict a
+    /// parked one, so a key-up waiting on the send queue was silently replaced by a mouse
+    /// move or a battery update and never reached the host — which then repeated the key
+    /// forever because it still believed the key was held.
+    private var pendingBroadcasts: [UInt8: (Data, CBMutableCharacteristic)] = [:]
 
     func start() {
         isHIDServiceAllowed = true
@@ -88,7 +92,7 @@ final class HIDPeripheral: NSObject, ObservableObject {
         isAdvertising = false
         isHIDServiceAdded = false
         isReadyToSendNotification = true
-        pendingBroadcast = nil
+        pendingBroadcasts.removeAll()
         batteryServiceObj = nil
         deviceInfoServiceObj = nil
         hidServiceObj = nil
@@ -117,7 +121,7 @@ final class HIDPeripheral: NSObject, ObservableObject {
     func sendKeyboard(_ report: KeyboardReport) {
         broadcast(report.data, reportID: .keyboard)
         // boot mode hosts read this characteristic instead
-        bootKeyboardInputChar.map { _ = updateValue(report.data, for: $0) }
+        bootKeyboardInputChar.map { _ = updateValue(report.data, for: $0, reportID: ReportID.keyboard.rawValue) }
     }
 
     func sendConsumer(_ report: ConsumerReport) {
@@ -161,7 +165,9 @@ final class HIDPeripheral: NSObject, ObservableObject {
         batteryLevel = clamped
         let asHIDReport = Data([clamped])
         cachedReports[ReportID.battery.rawValue] = asHIDReport
-        if let batteryLevelChar { _ = updateValue(asHIDReport, for: batteryLevelChar) }
+        if let batteryLevelChar {
+            _ = updateValue(asHIDReport, for: batteryLevelChar, reportID: ReportID.battery.rawValue)
+        }
     }
 
     /// if host connects but never subscribes (stale GATT cache), cycle a temp service to fire Service Changed so it re-discovers
@@ -388,35 +394,50 @@ final class HIDPeripheral: NSObject, ObservableObject {
     private func broadcast(_ data: Data, reportID: ReportID) {
         cachedReports[reportID.rawValue] = data
         guard let char = charsByReportID[reportID.rawValue] else { return }
-        _ = updateValue(data, for: char)
+        _ = updateValue(data, for: char, reportID: reportID.rawValue)
     }
 
     @discardableResult
-    private func updateValue(_ data: Data, for char: CBMutableCharacteristic) -> Bool {
+    private func updateValue(_ data: Data, for char: CBMutableCharacteristic, reportID: UInt8? = nil) -> Bool {
         guard let pManager else { return false }
         let recipients = activeRecipients()
         guard !recipients.isEmpty else { return false }
         if !isReadyToSendNotification {
-            pendingBroadcast = (data, char)
+            park(data, for: char, reportID: reportID)
             return false
         }
         let accepted = pManager.updateValue(data, for: char, onSubscribedCentrals: recipients)
         if !accepted {
+            // the queue is full: keep this report, replacing only an older one of its own kind
             isReadyToSendNotification = false
-            pendingBroadcast = (data, char)
+            park(data, for: char, reportID: reportID)
         }
         return accepted
     }
 
-    private func drainPendingBroadcast() {
-        guard let (data, char) = pendingBroadcast, let pManager else { return }
-        pendingBroadcast = nil
-        let recipients = activeRecipients()
-        guard !recipients.isEmpty else { return }
-        let accepted = pManager.updateValue(data, for: char, onSubscribedCentrals: recipients)
-        if !accepted {
-            isReadyToSendNotification = false
-            pendingBroadcast = (data, char)
+    /// Parks a report that could not be sent, keyed by report ID. Where the ID is unknown the
+    /// characteristic stands in for it, so an unidentified report still cannot overwrite one
+    /// from another characteristic.
+    private func park(_ data: Data, for char: CBMutableCharacteristic, reportID id: UInt8?) {
+        pendingBroadcasts[id ?? reportID(forCharacteristic: char) ?? 0xF0] = (data, char)
+    }
+
+    /// Re-sends every parked report, oldest first. Nothing here can drop one on the floor:
+    /// a report that fails again simply stays parked, and each ID is drained independently,
+    /// so no report type can evict another.
+    private func drainPendingBroadcasts() {
+        guard !pendingBroadcasts.isEmpty, let pManager else { return }
+        for id in pendingBroadcasts.keys.sorted() {
+            guard let (data, char) = pendingBroadcasts[id] else { continue }
+            let recipients = activeRecipients()
+            guard !recipients.isEmpty else { return }
+            if pManager.updateValue(data, for: char, onSubscribedCentrals: recipients) {
+                pendingBroadcasts.removeValue(forKey: id)
+            } else {
+                // still congested: leave this one and everything after it parked
+                isReadyToSendNotification = false
+                return
+            }
         }
     }
 
@@ -520,9 +541,9 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
         } else if characteristic.uuid == HIDProfile.bootMouseInputReport, let bootMouseInputChar {
             _ = updateValue(MouseReport.zero.data, for: bootMouseInputChar)
         } else if characteristic.uuid == HIDProfile.bootKeyboardInputReport, let bootKeyboardInputChar {
-            _ = updateValue(KeyboardReport.zero.data, for: bootKeyboardInputChar)
+            _ = updateValue(KeyboardReport.zero.data, for: bootKeyboardInputChar, reportID: ReportID.keyboard.rawValue)
         } else if characteristic.uuid == HIDProfile.batteryLevel, let batteryLevelChar {
-            _ = updateValue(Data([batteryLevel]), for: batteryLevelChar)
+            _ = updateValue(Data([batteryLevel]), for: batteryLevelChar, reportID: ReportID.battery.rawValue)
         }
     }
 
@@ -547,7 +568,7 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
 
     func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
         isReadyToSendNotification = true
-        drainPendingBroadcast()
+        drainPendingBroadcasts()
     }
 
     func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveRead request: CBATTRequest) {
