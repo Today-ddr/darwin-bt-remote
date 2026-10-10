@@ -378,6 +378,10 @@ extension L10n {
             "keyboard.print_screen"
         }
 
+        static var toggleOnscreenKeyboard: LocalizedStringKey {
+            "keyboard.toggle_onscreen_keyboard"
+        }
+
         static var backspace: LocalizedStringKey {
             "keyboard.backspace"
         }

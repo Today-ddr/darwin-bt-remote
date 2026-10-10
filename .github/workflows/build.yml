@@ -32,6 +32,23 @@ jobs:
           chmod +x ci_scripts/ci_post_clone.sh
           ci_scripts/ci_post_clone.sh
 
+      # The bundle version must come from the tag, not from project.yml: building a
+      # v0.2.0 tag while project.yml still said 0.1.0 published an artifact whose
+      # CFBundleShortVersionString disagreed with the release it was attached to.
+      - name: Derive version from tag
+        env:
+          TAG: ${{ github.event.inputs.version || github.ref_name }}
+        run: |
+          # only a vX.Y.Z tag pins the version; branch builds keep project.yml's value
+          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            VERSION="${TAG#v}"
+            echo "VERSION_OVERRIDES=MARKETING_VERSION=$VERSION CURRENT_PROJECT_VERSION=${GITHUB_RUN_NUMBER:-1}" >> "$GITHUB_ENV"
+            echo "Version pinned from tag: $VERSION"
+          else
+            echo "VERSION_OVERRIDES=" >> "$GITHUB_ENV"
+            echo "Not a release tag ($TAG); using project.yml's version."
+          fi
+
       - name: Build iOS IPA
         run: |
           set -o pipefail
@@ -44,6 +61,7 @@ jobs:
             -destination "generic/platform=iOS" \
             -derivedDataPath .build/DerivedData \
             CODE_SIGNING_ALLOWED=NO \
+            $VERSION_OVERRIDES \
             build | xcbeautify
 
           rm -rf .build/Payload
@@ -65,9 +83,13 @@ jobs:
             -destination "platform=macOS" \
             -derivedDataPath .build/DerivedData \
             CODE_SIGNING_ALLOWED=NO \
+            $VERSION_OVERRIDES \
             build | xcbeautify
 
-          codesign --force --sign - --entitlements $PROJECT/entitlements.plist .build/DerivedData/Build/Products/Release/$PROJECT.app || true
+          # No `|| true` here, matching build.sh: a failed ad-hoc signing used to be
+          # swallowed, and the unsigned app was still zipped and published while CI
+          # stayed green. Gatekeeper then blocked it for whoever downloaded it.
+          codesign --force --sign - --entitlements $PROJECT/entitlements.plist .build/DerivedData/Build/Products/Release/$PROJECT.app
           mkdir -p .build/macOS-dist
           cp -R .build/DerivedData/Build/Products/Release/$PROJECT.app .build/macOS-dist/
           cd .build/macOS-dist

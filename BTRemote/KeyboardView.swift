@@ -88,7 +88,7 @@ struct KeyboardView: View {
                     .foregroundColor(.primary)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Toggle Onscreen Keyboard")
+            .accessibilityLabel(L10n.Keyboard.toggleOnscreenKeyboard)
         }
         .padding(.horizontal, 8)
         // no top padding: this page has no title bar above the switcher, so the
