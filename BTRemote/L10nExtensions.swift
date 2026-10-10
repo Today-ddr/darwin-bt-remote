@@ -202,6 +202,30 @@ extension L10n {
             "settings.connection"
         }
 
+        static var haptics: LocalizedStringKey {
+            "settings.haptics"
+        }
+
+        static var hapticsEnabled: LocalizedStringKey {
+            "settings.haptics.enabled"
+        }
+
+        static var hapticsTrackpad: LocalizedStringKey {
+            "settings.haptics.trackpad"
+        }
+
+        static var hapticsScroll: LocalizedStringKey {
+            "settings.haptics.scroll"
+        }
+
+        static var hapticsKeyboard: LocalizedStringKey {
+            "settings.haptics.keyboard"
+        }
+
+        static var hapticsHint: LocalizedStringKey {
+            "settings.haptics.hint"
+        }
+
         static var autoAdvertise: LocalizedStringKey {
             "settings.auto_advertise"
         }

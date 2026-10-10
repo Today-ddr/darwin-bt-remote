@@ -34,7 +34,15 @@ struct BTRemoteApp: App {
     }
 
     init() {
-        UserDefaults.standard.register(defaults: [AppSettings.useServiceChangedKey: true])
+        UserDefaults.standard.register(defaults: [
+            AppSettings.useServiceChangedKey: true,
+            // Haptics read raw UserDefaults, so the on-by-default state has to be
+            // registered here — an @AppStorage default alone is invisible to them.
+            AppSettings.hapticsEnabledKey: true,
+            AppSettings.hapticsTrackpadKey: true,
+            AppSettings.hapticsKeyboardKey: true,
+            AppSettings.hapticsScrollKey: true
+        ])
     }
 
     private var hid: HIDInput {

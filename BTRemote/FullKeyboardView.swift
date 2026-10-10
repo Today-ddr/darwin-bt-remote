@@ -177,7 +177,7 @@ private struct FullKeyCapButton: View {
                 .onChanged { _ in
                     if !pressed {
                         pressed = true
-                        Haptics.tap()
+                        Haptics.tap(from: .keyboard)
                         onPress()
                     }
                 }

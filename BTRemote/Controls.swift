@@ -8,6 +8,7 @@ struct PressGesture: ViewModifier {
     let onPress: () -> Void
     let onRelease: () -> Void
     @Binding var pressed: Bool
+    var hapticSource: Haptics.Source = .keyboard
 
     func body(content: Content) -> some View {
         content.simultaneousGesture(
@@ -15,7 +16,7 @@ struct PressGesture: ViewModifier {
                 .onChanged { _ in
                     if !pressed {
                         pressed = true
-                        Haptics.tap()
+                        Haptics.tap(from: hapticSource)
                         onPress()
                     }
                 }
@@ -32,6 +33,7 @@ struct PressGesture: ViewModifier {
 struct HoldButton<Background: View, Label: View>: View {
     let onPress: () -> Void
     let onRelease: () -> Void
+    var hapticSource: Haptics.Source = .keyboard
     @ViewBuilder var background: () -> Background
     @ViewBuilder var label: () -> Label
     @State private var pressed = false
@@ -44,6 +46,13 @@ struct HoldButton<Background: View, Label: View>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .opacity(pressed ? 0.5 : 1)
         .contentShape(Rectangle())
-        .modifier(PressGesture(onPress: onPress, onRelease: onRelease, pressed: $pressed))
+        .modifier(
+            PressGesture(
+                onPress: onPress,
+                onRelease: onRelease,
+                pressed: $pressed,
+                hapticSource: hapticSource
+            )
+        )
     }
 }

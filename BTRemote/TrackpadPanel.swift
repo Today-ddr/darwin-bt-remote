@@ -42,8 +42,8 @@ struct TrackpadPanel: View {
                         hid.sendMouse(MouseReport(buttons: buttons, dX: dx, dY: dy))
                     },
                     onScroll: { hid.scroll($0) },
-                    onLeftClick: { Haptics.tap(); hid.click(.left) },
-                    onRightClick: { Haptics.tap(); hid.click(.right) },
+                    onLeftClick: { Haptics.tap(from: .trackpad); hid.click(.left) },
+                    onRightClick: { Haptics.tap(from: .trackpad); hid.click(.right) },
                     onDragEnd: {
                         hid.sendMouse(MouseReport(buttons: activeButtons))
                     },
@@ -130,6 +130,7 @@ struct TrackpadPanel: View {
                 activeButtons.remove(button)
                 hid.sendMouse(MouseReport(buttons: activeButtons))
             },
+            hapticSource: .trackpad,
             background: { RoundedRectangle(cornerRadius: 12).fill(groupFill) },
             label: { Color.clear }
         )
@@ -138,8 +139,12 @@ struct TrackpadPanel: View {
 
     private func scrollButton(_ icon: String, _ label: LocalizedStringKey, _ wheel: Int8) -> some View {
         HoldButton(
-            onPress: { hid.scroll(wheel) },
+            onPress: {
+                hid.scroll(wheel)
+                Haptics.scrollTick()
+            },
             onRelease: {},
+            hapticSource: .trackpad,
             background: { RoundedRectangle(cornerRadius: 12).fill(groupFill) },
             label: { Image(systemName: icon).font(.body) }
         )

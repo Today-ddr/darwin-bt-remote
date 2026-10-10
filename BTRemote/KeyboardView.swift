@@ -47,7 +47,7 @@ struct KeyboardView: View {
         HStack(spacing: 6) {
             ForEach(KeyboardPage.allCases) { page in
                 Button {
-                    Haptics.tap()
+                    Haptics.tap(from: .keyboard)
                     withAnimation(.easeInOut(duration: 0.18)) {
                         selectedPage = page.rawValue
                     }
@@ -72,7 +72,7 @@ struct KeyboardView: View {
                 .buttonStyle(.plain)
             }
             Button {
-                Haptics.tap()
+                Haptics.tap(from: .keyboard)
                 hid.toggleVirtualKeyboard()
             } label: {
                 Image(systemName: "keyboard.chevron.compact.down")

@@ -53,7 +53,7 @@ struct ClassicKeyboardView: View {
         accessoryKey("escape", L10n.Keyboard.esc) { press(.escape) }
         accessoryKey("arrow.right.to.line", L10n.Keyboard.tab) { press(.tab) }
         Button {
-            Haptics.tap()
+            Haptics.tap(from: .keyboard)
             toggle(.leftCtrl)
         } label: {
             Image(systemName: "control")
@@ -68,7 +68,7 @@ struct ClassicKeyboardView: View {
 
     private func accessoryKey(_ symbol: String, _ label: LocalizedStringKey, _ tap: @escaping () -> Void) -> some View {
         Button {
-            Haptics.tap()
+            Haptics.tap(from: .keyboard)
             tap()
         } label: {
             Image(systemName: symbol).foregroundStyle(Color.primary)
@@ -128,7 +128,7 @@ struct ClassicKeyboardView: View {
             return false
         }()
         return Button {
-            Haptics.tap()
+            Haptics.tap(from: .keyboard)
             switch key.action {
             case let .key(code): press(code)
             case let .modifier(mod): toggle(mod)

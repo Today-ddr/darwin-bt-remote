@@ -145,13 +145,102 @@ extension EnvironmentValues {
     }
 }
 
+/// Haptic feedback, modelled on the MacBook trackpad.
+///
+/// Trackpad clicks use `.rigid` — Apple's description of that style is "crisp,
+/// rigid", the closest match to the firm detent of a Force Touch click. Scrolling
+/// uses the selection generator, whose rapid tick is what gives the MacBook
+/// trackpad its distinctive texture.
+///
+/// Generators are cached and pre-warmed: the Taptic Engine takes a few
+/// milliseconds to spin up, and an unprewarmed first tap is noticeably laggy.
 enum Haptics {
+    enum Source {
+        case trackpad
+        case keyboard
+    }
+
+    #if os(iOS)
+        @MainActor private static var impact: UIImpactFeedbackGenerator?
+        @MainActor private static var selection: UISelectionFeedbackGenerator?
+        @MainActor private static var lastScrollTick: CFTimeInterval = 0
+        /// Ceiling of ~25 ticks/second, so a fast flick stays crisp instead of buzzing.
+        private static let scrollTickInterval: CFTimeInterval = 0.04
+    #endif
+
+    /// A discrete press: a click, a key, a gesture.
     @MainActor
-    static func tap() {
+    static func tap(from source: Source = .trackpad) {
         #if os(iOS)
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            guard isEnabled(source) else { return }
+            let generator = impactGenerator()
+            generator.impactOccurred()
+            generator.prepare()
         #endif
     }
+
+    /// A scroll detent. Rate-limited, so callers may fire it per wheel step.
+    @MainActor
+    static func scrollTick() {
+        #if os(iOS)
+            let defaults = UserDefaults.standard
+            guard defaults.bool(forKey: AppSettings.hapticsEnabledKey),
+                  defaults.bool(forKey: AppSettings.hapticsTrackpadKey),
+                  defaults.bool(forKey: AppSettings.hapticsScrollKey)
+            else { return }
+            let now = CACurrentMediaTime()
+            guard now - lastScrollTick >= scrollTickInterval else { return }
+            lastScrollTick = now
+            let generator = selectionGenerator()
+            generator.selectionChanged()
+            generator.prepare()
+        #endif
+    }
+
+    /// Spin the engine up ahead of an interaction so the first tap lands on time.
+    @MainActor
+    static func prepare() {
+        #if os(iOS)
+            guard UserDefaults.standard.bool(forKey: AppSettings.hapticsEnabledKey) else { return }
+            _ = impactGenerator()
+            _ = selectionGenerator()
+        #endif
+    }
+
+    #if os(iOS)
+        @MainActor
+        private static func isEnabled(_ source: Source) -> Bool {
+            let defaults = UserDefaults.standard
+            guard defaults.bool(forKey: AppSettings.hapticsEnabledKey) else { return false }
+            switch source {
+            case .trackpad: return defaults.bool(forKey: AppSettings.hapticsTrackpadKey)
+            case .keyboard: return defaults.bool(forKey: AppSettings.hapticsKeyboardKey)
+            }
+        }
+
+        @MainActor
+        private static func impactGenerator() -> UIImpactFeedbackGenerator {
+            if let impact {
+                return impact
+            }
+            let generator = UIImpactFeedbackGenerator(style: .rigid)
+            generator.prepare()
+            impact = generator
+            return generator
+        }
+
+        @MainActor
+        private static func selectionGenerator() -> UISelectionFeedbackGenerator {
+            if let selection {
+                return selection
+            }
+            let generator = UISelectionFeedbackGenerator()
+            generator.prepare()
+            selection = generator
+            return generator
+        }
+
+    #endif
 }
 
 /// US-layout ASCII to keycode/modifier mapping

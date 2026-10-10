@@ -11,6 +11,10 @@ struct SettingsView: View {
     @AppStorage(AppSettings.developerModeKey) private var developerMode = false
     @AppStorage(AppSettings.useServiceChangedKey) private var forceServiceChanged = true
     @AppStorage(AppSettings.hasSeenWelcomeKey) private var hasSeenWelcome = false
+    @AppStorage(AppSettings.hapticsEnabledKey) private var hapticsEnabled = true
+    @AppStorage(AppSettings.hapticsTrackpadKey) private var hapticsTrackpad = true
+    @AppStorage(AppSettings.hapticsKeyboardKey) private var hapticsKeyboard = true
+    @AppStorage(AppSettings.hapticsScrollKey) private var hapticsScroll = true
     #if os(iOS)
         @AppStorage(AppSettings.autoAdvertiseKey) private var autoAdvertise = true
     #endif
@@ -50,6 +54,20 @@ struct SettingsView: View {
                 }
             }
             #if os(iOS)
+                Section(header: Text(L10n.Settings.haptics), footer: Text(L10n.Settings.hapticsHint)) {
+                    Toggle(L10n.Settings.hapticsEnabled, isOn: $hapticsEnabled)
+                    if hapticsEnabled {
+                        Toggle(L10n.Settings.hapticsTrackpad, isOn: $hapticsTrackpad)
+                        Toggle(L10n.Settings.hapticsScroll, isOn: $hapticsScroll)
+                            .disabled(!hapticsTrackpad)
+                        Toggle(L10n.Settings.hapticsKeyboard, isOn: $hapticsKeyboard)
+                    }
+                }
+                .onChange(of: hapticsEnabled) { enabled in
+                    if enabled {
+                        Haptics.prepare()
+                    }
+                }
                 Section(header: Text(L10n.Settings.connection), footer: Text(L10n.Settings.autoAdvertiseHint)) {
                     Toggle(L10n.Settings.autoAdvertise, isOn: $autoAdvertise)
                 }

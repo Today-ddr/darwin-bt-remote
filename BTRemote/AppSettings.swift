@@ -28,6 +28,10 @@ enum AppSettings {
     static let fourFingerTapKey = "BTRemote.fourFingerTap"
     static let rotationGestureActionKey = "BTRemote.rotationGestureAction"
     static let doubleTapDragKey = "BTRemote.doubleTapDrag"
+    static let hapticsEnabledKey = "BTRemote.hapticsEnabled"
+    static let hapticsTrackpadKey = "BTRemote.hapticsTrackpad"
+    static let hapticsKeyboardKey = "BTRemote.hapticsKeyboard"
+    static let hapticsScrollKey = "BTRemote.hapticsScroll"
 
     static let maxAdvertisedNameLength = 26
 
