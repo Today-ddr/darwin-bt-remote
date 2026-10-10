@@ -2,6 +2,8 @@ import SwiftUI
 
 struct TrackpadPanel: View {
     let hid: HIDInput
+    /// Set to false to embed the touch surface alone, without the mouse buttons and scroll column.
+    var showsControls = true
 
     @AppStorage(AppSettings.touchpadSensitivityKey) private var touchpadSensitivity = AppSettings.defaultPointerSensitivity
     @AppStorage(AppSettings.scrollSensitivityKey) private var scrollSensitivity = AppSettings.defaultScrollSensitivity
@@ -16,12 +18,16 @@ struct TrackpadPanel: View {
 
     var body: some View {
         VStack(spacing: cellGap) {
-            HStack(spacing: cellGap) {
+            if showsControls {
+                HStack(spacing: cellGap) {
+                    surface
+                    scrollColumn.frame(width: 46)
+                }
+                .frame(maxHeight: .infinity)
+                mouseButtonsRow.frame(height: 52)
+            } else {
                 surface
-                scrollColumn.frame(width: 46)
             }
-            .frame(maxHeight: .infinity)
-            mouseButtonsRow.frame(height: 52)
         }
     }
 

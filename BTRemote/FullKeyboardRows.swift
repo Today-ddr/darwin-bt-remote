@@ -112,9 +112,7 @@ extension FullKeyboardView {
     }
 }
 
-struct FullKeyCap: Identifiable {
-    let id = UUID()
-
+struct FullKeyCap {
     enum Label {
         case text(String)
         case letter(String)

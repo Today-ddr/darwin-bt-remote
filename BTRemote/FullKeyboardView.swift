@@ -1,9 +1,18 @@
 import SwiftUI
 
+/// Leftover height below the key rows under which a trackpad would be too cramped to use.
+private let trackpadMinimumHeight: CGFloat = 80
+/// Keeps the embedded touch surface clear of the home indicator and the swipe-up gesture.
+private let trackpadBottomInset: CGFloat = 8
+
 struct FullKeyboardView: View {
     @Environment(\.hid) private var hid
+    @Environment(\.scenePhase) private var scenePhase
     @State private var mods: KeyboardModifiers = []
     @State private var isCapsLockOn = false
+    /// Keys currently down, so a release reports the union of what is left pressed
+    /// instead of clearing the whole keyboard.
+    @State private var heldKeys: Set<Keycode> = []
 
     var body: some View {
         GeometryReader { geo in
@@ -16,6 +25,12 @@ struct FullKeyboardView: View {
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 4)
+        .onDisappear { releaseAllKeys() }
+        .onChange(of: scenePhase) { phase in
+            if phase != .active {
+                releaseAllKeys()
+            }
+        }
     }
 
     // MARK: - Landscape Keyboard (6 rows standard layout)
@@ -26,15 +41,20 @@ struct FullKeyboardView: View {
         let availableHeight = size.height - (totalRows - 1) * gap
         let keyHeight = min(52, max(28, availableHeight / totalRows))
 
-        return VStack(spacing: gap) {
-            keyRow(row0, width: size.width, gap: gap, height: keyHeight, totalWeight: 15.0, isCompact: false)
-            keyRow(row1, width: size.width, gap: gap, height: keyHeight, totalWeight: 15.0, isCompact: false)
-            keyRow(row2, width: size.width, gap: gap, height: keyHeight, totalWeight: 15.0, isCompact: false)
-            keyRow(row3, width: size.width, gap: gap, height: keyHeight, totalWeight: 15.0, isCompact: false)
-            keyRow(row4, width: size.width, gap: gap, height: keyHeight, totalWeight: 15.0, isCompact: false)
-            keyRow(row5, width: size.width, gap: gap, height: keyHeight, totalWeight: 15.0, isCompact: false)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        return keyboardLayout(
+            rows: [
+                (row0, 15.0),
+                (row1, 15.0),
+                (row2, 15.0),
+                (row3, 15.0),
+                (row4, 15.0),
+                (row5, 15.0)
+            ],
+            size: size,
+            gap: gap,
+            height: keyHeight,
+            isCompact: false
+        )
     }
 
     // MARK: - Portrait Keyboard (8 rows non-scrollable native layout)
@@ -45,17 +65,46 @@ struct FullKeyboardView: View {
         let availableHeight = size.height - (totalRows - 1) * gap
         let keyHeight = min(46, max(30, availableHeight / totalRows))
 
+        return keyboardLayout(
+            rows: [
+                (pRow0, 10.0),
+                (pRow1, 10.0),
+                (pRow2, 10.0),
+                (pRow3, 10.0),
+                (pRow4, 9.0),
+                (pRow5, 10.0),
+                (pRow6, 10.0),
+                (pRow7, 10.0)
+            ],
+            size: size,
+            gap: gap,
+            height: keyHeight,
+            isCompact: true
+        )
+    }
+
+    /// Keys pinned to the top; a trackpad fills the leftover below when there is room for one.
+    private func keyboardLayout(
+        rows: [([FullKeyCap], CGFloat)],
+        size: CGSize,
+        gap: CGFloat,
+        height: CGFloat,
+        isCompact: Bool
+    ) -> some View {
+        let rowsHeight = CGFloat(rows.count) * height + CGFloat(max(rows.count - 1, 0)) * gap
+        let leftover = size.height - rowsHeight
+
         return VStack(spacing: gap) {
-            keyRow(pRow0, width: size.width, gap: gap, height: keyHeight, totalWeight: 10.0, isCompact: true)
-            keyRow(pRow1, width: size.width, gap: gap, height: keyHeight, totalWeight: 10.0, isCompact: true)
-            keyRow(pRow2, width: size.width, gap: gap, height: keyHeight, totalWeight: 10.0, isCompact: true)
-            keyRow(pRow3, width: size.width, gap: gap, height: keyHeight, totalWeight: 10.0, isCompact: true)
-            keyRow(pRow4, width: size.width, gap: gap, height: keyHeight, totalWeight: 9.0, isCompact: true)
-            keyRow(pRow5, width: size.width, gap: gap, height: keyHeight, totalWeight: 10.0, isCompact: true)
-            keyRow(pRow6, width: size.width, gap: gap, height: keyHeight, totalWeight: 10.0, isCompact: true)
-            keyRow(pRow7, width: size.width, gap: gap, height: keyHeight, totalWeight: 10.0, isCompact: true)
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                keyRow(row.0, width: size.width, gap: gap, height: height, totalWeight: row.1, isCompact: isCompact)
+            }
+            if leftover >= trackpadMinimumHeight {
+                TrackpadPanel(hid: hid, showsControls: false)
+                    .frame(maxHeight: .infinity)
+                    .padding(.bottom, trackpadBottomInset)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private func keyRow(
@@ -70,7 +119,7 @@ struct FullKeyboardView: View {
         let unit = max(0, (width - gaps) / totalWeight)
 
         return HStack(spacing: gap) {
-            ForEach(keys) { key in
+            ForEach(Array(keys.enumerated()), id: \.offset) { _, key in
                 FullKeyCapButton(
                     key: key,
                     isCompact: isCompact,
@@ -111,21 +160,37 @@ struct FullKeyboardView: View {
     }
 
     private func handleRelease(_ key: FullKeyCap) {
-        if case .key = key.action {
-            keyUp()
+        if case let .key(code) = key.action {
+            keyUp(code)
         }
     }
 
     private func keyDown(_ code: Keycode) {
-        var effectiveMods = mods
-        if isCapsLockOn && isLetter(code) {
-            effectiveMods.insert(.leftShift)
-        }
-        hid.keyDown(code, modifiers: effectiveMods)
+        heldKeys.insert(code)
+        sendHeldKeys()
     }
 
-    private func keyUp() {
+    /// Releases `code` while leaving any other held key down.
+    private func keyUp(_ code: Keycode) {
+        heldKeys.remove(code)
+        sendHeldKeys()
+    }
+
+    /// Drops every held key and clears the host, e.g. when the page goes away or the app backgrounds.
+    private func releaseAllKeys() {
+        guard !heldKeys.isEmpty else { return }
+        heldKeys.removeAll()
         hid.keyUp()
+    }
+
+    private func sendHeldKeys() {
+        var effectiveMods = mods
+        if isCapsLockOn {
+            for key in heldKeys where isLetter(key) {
+                effectiveMods.insert(.leftShift)
+            }
+        }
+        hid.sendKeyboard(KeyboardReport(modifiers: effectiveMods, keys: Array(heldKeys).sorted { $0.rawValue < $1.rawValue }))
     }
 
     private func toggleCapsLock() {
