@@ -11,6 +11,8 @@ struct SetupView: View {
     @AppStorage(AppSettings.developerModeKey) private var developerMode = false
     @AppStorage(AppSettings.advertisedNameKey) private var advertisedName = L10n.Bluetooth.advertisedName
     @State private var selectedInfo: DeviceEntry?
+    @State private var pendingRemoval: DeviceEntry?
+    @State private var showRemoveConfirm = false
     #if os(macOS)
         @State private var showBluetoothOff = false
     #endif
@@ -85,6 +87,17 @@ struct SetupView: View {
                 Text(L10n.Setup.bluetoothOffMessage)
             }
         #endif
+            .confirmationDialog(
+                L10n.Device.removeConfirmTitle,
+                isPresented: $showRemoveConfirm,
+                titleVisibility: .visible,
+                presenting: pendingRemoval
+            ) { entry in
+                Button(L10n.Device.remove, role: .destructive) { lowEnergy.removeCentral(entry.id) }
+                Button(L10n.Action.notNow, role: .cancel) {}
+            } message: { _ in
+                Text(L10n.Device.removeConfirmMessage)
+            }
     }
 
     private var guideSection: some View {
@@ -207,6 +220,7 @@ struct SetupView: View {
     /// hosts that connected to us (peripheral role); subscribed ones can receive input
     private var _connectedDevices: [DeviceEntry] {
         lowEnergy.connectedCentrals
+            .filter { !lowEnergy.isBlocked($0) }
             .map { uuid in
                 let alias = names.name(for: uuid)
                 let subscribed = lowEnergy.subscribedCentrals.keys.contains(uuid)
@@ -259,7 +273,11 @@ struct SetupView: View {
         ConnectedDeviceRow(
             entry: entry,
             onToggle: { lowEnergy.toggleActive(entry.id) },
-            onInfo: { selectedInfo = entry }
+            onInfo: { selectedInfo = entry },
+            onRemove: {
+                pendingRemoval = entry
+                showRemoveConfirm = true
+            }
         )
     }
 

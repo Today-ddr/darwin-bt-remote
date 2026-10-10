@@ -90,6 +90,7 @@ struct ConnectedDeviceRow: View {
     let entry: DeviceEntry
     let onToggle: () -> Void
     let onInfo: () -> Void
+    let onRemove: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -105,6 +106,12 @@ struct ConnectedDeviceRow: View {
             }
             .buttonStyle(.borderless)
             .accessibilityLabel(L10n.DeviceInfo.info)
+
+            Button(role: .destructive, action: onRemove) {
+                Image(systemName: "trash").foregroundColor(.red)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel(L10n.Device.remove)
         }
     }
 

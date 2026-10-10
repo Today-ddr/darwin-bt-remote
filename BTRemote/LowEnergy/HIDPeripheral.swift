@@ -19,6 +19,9 @@ final class HIDPeripheral: NSObject, ObservableObject {
     @Published private(set) var batteryLevel: UInt8 = 100
 
     private var centralObjects: [UUID: CBCentral] = [:]
+    /// hosts the user removed from the list; they stay linked at the Bluetooth level
+    /// but receive nothing until they unsubscribe, which clears the block.
+    private var blockedCentrals: Set<UUID> = []
 
     var advertiseLocalName: String = UserDefaults.standard.string(forKey: AppSettings.advertisedNameKey) ?? L10n.Bluetooth.advertisedName
 
@@ -100,6 +103,7 @@ final class HIDPeripheral: NSObject, ObservableObject {
         inactiveCentrals.removeAll()
         connectedCentrals.removeAll()
         centralObjects.removeAll()
+        blockedCentrals.removeAll()
     }
 
     func sendMouse(_ report: MouseReport) {
@@ -130,6 +134,26 @@ final class HIDPeripheral: NSObject, ObservableObject {
         } else {
             inactiveCentrals.insert(uuid)
         }
+    }
+
+    /// Remove a host from the connected list and stop sending it input.
+    ///
+    /// CoreBluetooth exposes no way for a peripheral to drop a single central —
+    /// `CBPeripheralManager` has no counterpart to `cancelPeripheralConnection`,
+    /// and removing the service does not notify the peer (it only makes this side
+    /// lose track of its subscribers). So the link survives, but the host is
+    /// blocked from `activeRecipients()` and hidden from the list. The block
+    /// clears on unsubscribe or reconnect, so a host that re-subscribes
+    /// deliberately can come back.
+    func removeCentral(_ uuid: UUID) {
+        blockedCentrals.insert(uuid)
+        inactiveCentrals.remove(uuid)
+        centralObjects.removeValue(forKey: uuid)
+        objectWillChange.send()
+    }
+
+    func isBlocked(_ uuid: UUID) -> Bool {
+        blockedCentrals.contains(uuid)
     }
 
     func updateBatteryLevel(_ level: UInt8) {
@@ -411,7 +435,7 @@ final class HIDPeripheral: NSObject, ObservableObject {
 
     private func activeRecipients() -> [CBCentral] {
         subscribedCentrals.keys
-            .filter { !inactiveCentrals.contains($0) }
+            .filter { !inactiveCentrals.contains($0) && !blockedCentrals.contains($0) }
             .compactMap { centralObjects[$0] }
     }
 
@@ -484,6 +508,8 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
         didSubscribeTo characteristic: CBCharacteristic
     ) {
         _trackInteraction(from: central)
+        // a fresh subscribe is a deliberate action by the host, so let it back in
+        blockedCentrals.remove(central.identifier)
         subscribedCentrals[central.identifier, default: []].insert(characteristic.uuid)
         _trace("subscribe: \(central.identifier) -> \(characteristic.uuid)")
         if let id = reportID(forCharacteristic: characteristic),

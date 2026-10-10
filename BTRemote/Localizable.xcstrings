@@ -3390,13 +3390,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Keyboard"
+            "value": "Combo"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "全键盘"
+            "value": "键鼠"
           }
         }
       }
@@ -4196,6 +4196,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "使用触控板和键盘时的振动反馈。"
+          }
+        }
+      }
+    },
+    "device.remove": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
+        }
+      }
+    },
+    "device.remove_confirm_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove this device?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要移除该设备吗？"
+          }
+        }
+      }
+    },
+    "device.remove_confirm_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It will be removed from the list and stop receiving your input. Bluetooth can only be disconnected from the other device, so it may still show as connected there."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "它将被移出列表，并且不再接收你的输入。蓝牙断开只能由对方设备发起，因此对方设备上可能仍显示为已连接。"
           }
         }
       }

@@ -249,6 +249,18 @@ enum L10n {
             "device.connected_legend"
         }
 
+        static var remove: LocalizedStringKey {
+            "device.remove"
+        }
+
+        static var removeConfirmTitle: LocalizedStringKey {
+            "device.remove_confirm_title"
+        }
+
+        static var removeConfirmMessage: LocalizedStringKey {
+            "device.remove_confirm_message"
+        }
+
         static func rssi(_ value: Int) -> String {
             String.localizedStringWithFormat(
                 String(localized: "device.rssi_format"),
