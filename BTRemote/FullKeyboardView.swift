@@ -28,8 +28,14 @@ struct FullKeyboardView: View {
     /// Keys currently down, so a release reports the union of what is left pressed
     /// instead of clearing the whole keyboard.
     @State private var heldKeys: Set<Keycode> = []
-    /// Fingers on the key surface, shared with every per-key touch layer.
-    @State private var surfaceTouches = KeyTouchCount()
+    /// Fingers on the key surface, shared with every per-key touch layer. One instance for
+    /// the life of the page, held in `@StateObject` rather than `@State`: `@State` would
+    /// keep the object alive just as well, but it does not subscribe to it, so the
+    /// `@Published` count would reach nobody and the `onChange` below would stay dead code —
+    /// measured, not assumed: a `@State`-held `ObservableObject` re-evaluated its body zero
+    /// times as its value moved, while the same object in `@StateObject` re-evaluated it once
+    /// per change. `@StateObject` subscribes, so `value` is what drives the safety net.
+    @StateObject private var surfaceTouches = KeyTouchCount()
 
     var body: some View {
         GeometryReader { geo in
@@ -44,7 +50,11 @@ struct FullKeyboardView: View {
         // the vertical insets stay, so the top row still clears the status bar and the
         // bottom row still clears the home indicator.
         .ignoresSafeArea(.container, edges: .horizontal)
-        // last line of defence: nothing is touching the surface, so nothing may stay held
+        // last line of defence: nothing is touching the surface, so nothing may stay held.
+        // This fires now that `KeyTouchCount` publishes its value; it can arrive at the same
+        // moment as the surface layer's own report in `KeyCapTouchSurface`, and releasing
+        // twice is harmless — `releaseAllKeys` leaves an empty keyboard alone, so the second
+        // call is a no-op rather than a second clear.
         .onChange(of: surfaceTouches.value) { count in
             if count == 0 {
                 releaseAllKeys()

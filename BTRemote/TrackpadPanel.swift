@@ -24,6 +24,17 @@ struct TrackpadPanel: View {
                     scrollColumn.frame(width: 46)
                 }
                 .frame(maxHeight: .infinity)
+                #if os(macOS)
+                    // The touch surface is a bare `DragGesture` on macOS: it carries
+                    // pointer movement and nothing else, and `TouchpadView` — which is
+                    // where left and right click come from on iOS — is inside
+                    // `#if os(iOS)`. Without this row the buttons that used to sit here
+                    // would leave macOS with no way to click at all, so the pointer pair
+                    // is restored for macOS only. The middle button it replaced stays in
+                    // the scroll column above, so only the two that had no other home
+                    // are repeated here.
+                    pointerButtonsRow
+                #endif
             } else {
                 surface
             }
@@ -82,6 +93,43 @@ struct TrackpadPanel: View {
             )
         #endif
     }
+
+    // Left and right click, restored for macOS.
+    //
+    // macOS gets its clicks from here and nowhere else: the trackpad surface itself
+    // only reports pointer movement, and the iOS touch gestures — the one-finger tap
+    // for a left click and the two-finger tap for a right click — are not built on
+    // macOS. A row of two buttons under the touch surface is the smallest thing that
+    // puts both back, and it sits where the left / middle / right row was before the
+    // middle button moved into the scroll column, so the panel keeps its old shape.
+    // They are `HoldButton`s, as that row was, so they hold the button down and drag
+    // like the ones they replaced rather than only clicking on release.
+    #if os(macOS)
+        private var pointerButtonsRow: some View {
+            HStack(spacing: cellGap) {
+                mouseButton(.left, "cursorarrow.click", L10n.Mouse.leftButton)
+                mouseButton(.right, "cursorarrow.click.2", L10n.Mouse.rightButton)
+            }
+            .frame(height: 44)
+        }
+
+        private func mouseButton(_ button: MouseButtons, _ icon: String, _ label: LocalizedStringKey) -> some View {
+            HoldButton(
+                onPress: {
+                    activeButtons.insert(button)
+                    hid.sendMouse(MouseReport(buttons: activeButtons))
+                },
+                onRelease: {
+                    activeButtons.remove(button)
+                    hid.sendMouse(MouseReport(buttons: activeButtons))
+                },
+                hapticSource: .trackpad,
+                background: { RoundedRectangle(cornerRadius: 12).fill(groupFill) },
+                label: { Image(systemName: icon).font(.body) }
+            )
+            .accessibilityLabel(label)
+        }
+    #endif
 
     private func handlePinchZoom(delta: CGFloat) {
         let action = TrackpadGestureAction(rawValue: pinchActionRaw) ?? .zoom
