@@ -9,9 +9,9 @@ private let trackpadBottomInset: CGFloat = 8
 private let maximumKeyHeight: CGFloat = 52
 /// Shortest a key gets before the keyboard stops scaling down.
 private let minimumKeyHeight: CGFloat = 28
-/// Space kept either side of the keys. The keyboard is allowed into the horizontal safe
-/// area (see `body`), so this margin is what stands between the outermost keys and the
-/// edge of the screen.
+/// Space kept either side of the keys, on top of the landscape safe-area padding `body`
+/// applies. The keyboard is allowed into the horizontal safe area, so together they are
+/// what stands between the outermost keys and the edge of the screen.
 private let keyHorizontalMargin: CGFloat = 8
 /// How far above a cap its press bubble floats, how much taller than the cap the bubble
 /// is, how round its corners are, and how much larger its label is drawn than the cap's.
@@ -38,18 +38,35 @@ struct FullKeyboardView: View {
     @StateObject private var surfaceTouches = KeyTouchCount()
 
     var body: some View {
-        GeometryReader { geo in
-            let isLandscape = geo.size.width > geo.size.height
-            keyboard(size: geo.size, isLandscape: isLandscape)
+        // The insets have to be read from a reader ABOVE the `ignoresSafeArea` below, not
+        // from the one that sizes the keys: a view that ignores a region reports a zero
+        // inset for it, so the inner reader would come back with `leading == 0` in
+        // landscape and the padding below would pad nothing. This outer reader still sits
+        // in the untouched safe area, so it reports what the system worked out for the
+        // device and the orientation we are actually in.
+        GeometryReader { outer in
+            let insets = outer.safeAreaInsets
+            GeometryReader { geo in
+                let isLandscape = geo.size.width > geo.size.height
+                keyboard(size: geo.size, isLandscape: isLandscape)
+            }
+            .padding(.horizontal, keyHorizontalMargin)
+            .padding(.vertical, 4)
+            // Keep the keys out from under the island and out of the rounded corners, which
+            // in landscape sit at the leading and trailing edges. The padding is the system's
+            // own safe-area inset rather than a per-model number: the system measures it for
+            // the device, the orientation and the window it is actually running in, so an
+            // unlisted phone, split view and iPad all follow without a device table to keep
+            // current. Portrait reports ~0 sideways and the island is then a top inset, which
+            // the vertical insets below already handle, so nothing shrinks there.
+            .padding(EdgeInsets(top: 0, leading: insets.leading, bottom: 0, trailing: insets.trailing))
+            // The keyboard is still allowed the full width of the device: that reclaims the
+            // wide empty margin the safe area would otherwise leave in landscape. The keys
+            // themselves stop at the island because of the padding above. Only the horizontal
+            // edges are ignored: the vertical insets stay, so the top row still clears the
+            // status bar and the bottom row still clears the home indicator.
+            .ignoresSafeArea(.container, edges: .horizontal)
         }
-        .padding(.horizontal, keyHorizontalMargin)
-        .padding(.vertical, 4)
-        // The keys span the full width of the device. In landscape the horizontal safe
-        // area is some 60pt a side, which left the keyboard as a narrow island with a
-        // wide empty margin on either side of it. Only the horizontal edges are ignored:
-        // the vertical insets stay, so the top row still clears the status bar and the
-        // bottom row still clears the home indicator.
-        .ignoresSafeArea(.container, edges: .horizontal)
         // last line of defence: nothing is touching the surface, so nothing may stay held.
         // This fires now that `KeyTouchCount` publishes its value; it can arrive at the same
         // moment as the surface layer's own report in `KeyCapTouchSurface`, and releasing
