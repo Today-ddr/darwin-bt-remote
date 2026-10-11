@@ -45,3 +45,46 @@ enum AppSettings {
     static let defaultScrollSensitivity = 1.0
     static let scrollSensitivityRange = 0.5 ... 3.0
 }
+
+/// The default binding of every trackpad gesture, in one place.
+///
+/// A gesture needs a default in two places: the picker shows one when the user
+/// has never chosen (`TrackpadGestureSettingsView`) and the recognizer applies
+/// one when nothing is stored (`TouchpadView`). Those used to each spell the
+/// value out, and a drift between two copies is invisible on screen — the
+/// picker would name one action while the gesture performed another. Both sides
+/// read this table instead.
+///
+/// These defaults follow Apple platform semantics, and four of them are
+/// macOS-only chords (Mission Control, App Exposé, switching Spaces). The
+/// controlled device is not necessarily an Apple device — it may be Windows,
+/// Linux, Android or tvOS, where `Ctrl`+arrow means something else or nothing
+/// at all — and nothing here can detect that, so treat these as Apple-host
+/// defaults rather than universal ones.
+enum GestureDefaults {
+    /// Pinch keeps zoom: `Cmd+=` / `Cmd+-` is the closest a keyboard can come
+    /// to a continuous pinch, and the continuous path lives in
+    /// `TrackpadPanel.handlePinchZoom`.
+    static let pinch = TrackpadGestureAction.zoom
+    /// Rotation is off, not remapped. A rotation event reports an angle, and
+    /// HID keyboard and mouse reports cannot express one, so any binding here
+    /// is a guess. The guess it used to fall back to was `rotateRight`, which
+    /// sends `Cmd+R` — the frontmost app's refresh/restart shortcut — so a
+    /// stray two-finger turn could reload or restart whatever app was in front.
+    static let rotation = TrackpadGestureAction.none
+
+    static let threeFingerSwipeUp = TrackpadGestureAction.appSwitcher
+    static let threeFingerSwipeDown = TrackpadGestureAction.home
+    static let threeFingerSwipeLeft = TrackpadGestureAction.previousApp
+    static let threeFingerSwipeRight = TrackpadGestureAction.nextApp
+    static let threeFingerTap = TrackpadGestureAction.spotlight
+
+    /// Four fingers, macOS semantics: Mission Control, App Exposé and Spaces,
+    /// which are the `Ctrl`+arrow chords rather than the iPadOS ones the
+    /// three-finger row uses.
+    static let fourFingerSwipeUp = TrackpadGestureAction.missionControl
+    static let fourFingerSwipeDown = TrackpadGestureAction.appExpose
+    static let fourFingerSwipeLeft = TrackpadGestureAction.switchSpaceLeft
+    static let fourFingerSwipeRight = TrackpadGestureAction.switchSpaceRight
+    static let fourFingerTap = TrackpadGestureAction.controlCenter
+}

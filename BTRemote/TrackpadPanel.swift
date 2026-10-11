@@ -9,8 +9,8 @@ struct TrackpadPanel: View {
     @AppStorage(AppSettings.scrollSensitivityKey) private var scrollSensitivity = AppSettings.defaultScrollSensitivity
     @AppStorage(AppSettings.invertScrollKey) private var invertScroll = false
     @AppStorage(AppSettings.doubleTapDragKey) private var doubleTapDrag = true
-    @AppStorage(AppSettings.pinchGestureActionKey) private var pinchActionRaw = TrackpadGestureAction.zoom.rawValue
-    @AppStorage(AppSettings.rotationGestureActionKey) private var rotateActionRaw = TrackpadGestureAction.rotateRight.rawValue
+    @AppStorage(AppSettings.pinchGestureActionKey) private var pinchActionRaw = GestureDefaults.pinch.rawValue
+    @AppStorage(AppSettings.rotationGestureActionKey) private var rotateActionRaw = GestureDefaults.rotation.rawValue
     @State private var activeButtons: MouseButtons = []
     #if os(macOS)
         @State private var dragOffset: CGSize = .zero
@@ -131,8 +131,12 @@ struct TrackpadPanel: View {
         }
     #endif
 
+    /// Pinch falls back to zoom, which is the closest a keyboard can come to a
+    /// MacBook pinch: a real pinch reports a continuous separation, and the
+    /// `Cmd+=` / `Cmd+-` pair is the one pairing macOS itself uses for the same
+    /// job, so the fallback stays zoom rather than following rotation to `none`.
     private func handlePinchZoom(delta: CGFloat) {
-        let action = TrackpadGestureAction(rawValue: pinchActionRaw) ?? .zoom
+        let action = TrackpadGestureAction(rawValue: pinchActionRaw) ?? GestureDefaults.pinch
         if action == .zoom {
             let key: Keycode = delta > 0 ? .equal : .minus
             hid.tap(key, modifiers: .leftGUI)
@@ -141,16 +145,31 @@ struct TrackpadPanel: View {
         }
     }
 
+    /// Rotation is unset by default, and unset means do nothing.
+    ///
+    /// It used to mean `rotateRight`, which sends `Cmd+R` — the frontmost app's
+    /// refresh/restart shortcut — so a two-finger turn the user did not intend
+    /// as a rotation could reload or restart whatever app was in front. A
+    /// rotation event carries an angle and HID keyboard and mouse reports
+    /// cannot express one, so there is no faithful binding to fall back to; the
+    /// rotate actions stay in the picker for anyone who wants them, but they
+    /// are chosen, never assumed.
     private func handleRotation(delta: CGFloat) {
-        let action = TrackpadGestureAction(rawValue: rotateActionRaw)
-        if action == .rotateRight || action == .rotateLeft || action == nil {
+        let action = TrackpadGestureAction(rawValue: rotateActionRaw) ?? GestureDefaults.rotation
+        switch action {
+        case .none:
+            break
+        case .rotateRight, .rotateLeft:
+            // Both directions share this gesture, so the one that was picked is
+            // the one that runs. The default (`none`) is handled above and
+            // never reaches here.
             if delta > 0 {
                 TrackpadGestureAction.rotateRight.execute(hid: hid)
             } else {
                 TrackpadGestureAction.rotateLeft.execute(hid: hid)
             }
-        } else {
-            action?.execute(hid: hid)
+        default:
+            action.execute(hid: hid)
         }
     }
 
