@@ -14,13 +14,17 @@ struct BTRemoteApp: App {
     #if os(iOS)
         @StateObject private var lowEnergy = HIDPeripheral()
         @StateObject private var central = HIDCentral()
-        @AppStorage(AppSettings.autoAdvertiseKey) private var autoAdvertise = true
     #else
         @StateObject private var lowEnergy = HIDPeripheral()
         @StateObject private var central = HIDCentral()
         @StateObject private var classic = HIDClassicDevice()
         @AppStorage("BTRemote.macTransportMode") private var modeRaw: String = TransportMode.defaultMode.rawValue
     #endif
+
+    /// Declared outside the platform branches on purpose: advertising is what wakes paired
+    /// hosts, so which platform ignores this preference is not a detail that can differ
+    /// between them. Off unless the user turns it on — the app stays silent until asked.
+    @AppStorage(AppSettings.autoAdvertiseKey) private var autoAdvertise = false
 
     @StateObject private var deviceNames = DeviceNameStore()
     @AppStorage(AppSettings.colorSchemeKey) private var selectedTheme = "system"
@@ -65,7 +69,15 @@ struct BTRemoteApp: App {
                     .preferredColorScheme(preferredColorScheme)
                     .onAppear {
                         central.start()
-                        if autoAdvertise { lowEnergy.start() }
+                        // with the preference off nothing is advertised, but the radio is
+                        // still read so Setup shows the real Bluetooth state instead of
+                        // "unknown" — `observeState` installs no services and starts no
+                        // advertising, so the app stays silent either way
+                        if autoAdvertise {
+                            lowEnergy.start()
+                        } else {
+                            lowEnergy.observeState()
+                        }
                     }
             #else
                 ContentView()
@@ -92,7 +104,18 @@ struct BTRemoteApp: App {
             case .classic:
                 classic.start()
             case .lowEnergy:
-                lowEnergy.start()
+                // the launch path honours the preference exactly as the iOS branch does.
+                // With it off, `observeState` still brings the radio up to read it — without
+                // it the Setup page would read `.unknown` as Bluetooth being off and refuse
+                // its own Start Advertising button. Services and advertising come only from
+                // `start`. `central.start()` is a different role — scanning and connecting
+                // to other people's devices — so launching it is not advertising and is
+                // left as it was.
+                if autoAdvertise {
+                    lowEnergy.start()
+                } else {
+                    lowEnergy.observeState()
+                }
                 central.start()
             }
         }
@@ -106,6 +129,11 @@ struct BTRemoteApp: App {
             case .classic:
                 classic.start()
             case .lowEnergy:
+                // switching mode is an explicit act by the user, so the peripheral comes up
+                // with the mode they chose: they are in Setup, looking at the mode picker,
+                // and a mode that comes up inert reads as the switch having failed. The
+                // preference governs what the app does unprompted at launch, not what it
+                // does when it is told to change.
                 lowEnergy.start()
                 central.start()
             }

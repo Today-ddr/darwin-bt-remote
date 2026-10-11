@@ -8,6 +8,8 @@ enum AppSettings {
     static let developerModeKey = "BTRemote.developerMode"
     static let useServiceChangedKey = "BTRemote.useServiceChanged"
     static let deviceNamesKey = "BTRemote.deviceNames"
+    /// UUID strings of the hosts the user removed; a removal has to outlive the launch that made it
+    static let blockedCentralsKey = "BTRemote.blockedCentrals"
     static let hasSeenWelcomeKey = "BTRemote.hasSeenWelcome"
     static let liveTypingKey = "BTRemote.liveTyping"
     static let remoteModeKey = "BTRemote.remoteMode"

@@ -18,7 +18,8 @@ struct SettingsView: View {
     @AppStorage(AppSettings.hapticsScrollKey) private var hapticsScroll = true
     @AppStorage(AppSettings.hapticsIntensityKey) private var hapticsIntensity = Haptics.Intensity.strong.rawValue
     #if os(iOS)
-        @AppStorage(AppSettings.autoAdvertiseKey) private var autoAdvertise = true
+        /// off by default: advertising is what wakes paired hosts, so it waits to be asked for
+        @AppStorage(AppSettings.autoAdvertiseKey) private var autoAdvertise = false
     #endif
 
     var body: some View {

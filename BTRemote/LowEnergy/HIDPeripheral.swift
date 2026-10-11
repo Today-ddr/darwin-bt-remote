@@ -27,8 +27,13 @@ final class HIDPeripheral: NSObject, ObservableObject {
 
     private var centralObjects: [UUID: CBCentral] = [:]
     /// hosts the user removed from the list; they stay linked at the Bluetooth level
-    /// but receive nothing until the user restores them.
-    private var blockedCentrals: Set<UUID> = []
+    /// but receive nothing until the user restores them. Persisted, because a removal is
+    /// the user's own decision and has to outlive the launch that made it: an in-memory
+    /// set would hand the host its input back the next time the app starts.
+    private var blockedCentrals: Set<UUID> = Set(
+        UserDefaults.standard.stringArray(forKey: AppSettings.blockedCentralsKey)?
+            .compactMap(UUID.init(uuidString:)) ?? []
+    )
     /// the order hosts subscribed in, so a handover can prefer the most recent one
     private var subscribeOrder: [UUID: UInt64] = [:]
     private var subscribeCounter: UInt64 = 0
@@ -97,6 +102,23 @@ final class HIDPeripheral: NSObject, ObservableObject {
         }
     }
 
+    /// Reads the radio's state without advertising.
+    ///
+    /// With advertising opt-in, nothing may be started at launch, but the Setup page still
+    /// needs a truthful `state` before its button is ever tapped: it reads `.poweredOn` to
+    /// decide between starting and complaining that Bluetooth is off, and a manager that
+    /// does not exist yet reports `.unknown`, which that check would take for a dead radio.
+    /// Bringing up the manager here only asks the system for the state — services are
+    /// installed (and advertising begins) only through `start`.
+    func observeState() {
+        guard pManager == nil else { return }
+        pManager = CBPeripheralManager(
+            delegate: self,
+            queue: nil,
+            options: [CBPeripheralManagerOptionShowPowerAlertKey: false]
+        )
+    }
+
     func stop() {
         isHIDServiceAllowed = false
         pManager?.stopAdvertising()
@@ -130,7 +152,10 @@ final class HIDPeripheral: NSObject, ObservableObject {
         inactiveCentrals.removeAll()
         connectedCentrals.removeAll()
         centralObjects.removeAll()
-        blockedCentrals.removeAll()
+        // the block list is deliberately not cleared here: it is what the user asked for, and
+        // `_resetForRestart` is a Bluetooth restart (the power alert), not a request to undo
+        // it. The set stays as loaded and is rewritten by the next change to it, so the
+        // persisted list is untouched by a restart too.
         subscribeOrder.removeAll()
         subscribeCounter = 0
         if lastError == Self.droppedInputNotice {
@@ -200,6 +225,7 @@ final class HIDPeripheral: NSObject, ObservableObject {
             activeCentral = nil
         }
         blockedCentrals.insert(uuid)
+        _saveBlockedCentrals()
         inactiveCentrals.remove(uuid)
         objectWillChange.send()
     }
@@ -217,9 +243,20 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// it never takes control from a host that holds it. Restoring a muted host stays muted.
     func restoreCentral(_ uuid: UUID) {
         blockedCentrals.remove(uuid)
+        _saveBlockedCentrals()
         objectWillChange.send()
         _reportDroppedInputIfNone()
         _drainIfUnblocked()
+    }
+
+    /// Writes the whole set on every change, the way `DeviceNameStore` writes its map: one
+    /// key holds one list, so there is no per-host bookkeeping to keep in step with the set
+    /// itself. UUID strings are stored because a `Set<UUID>` is not a plist type.
+    private func _saveBlockedCentrals() {
+        UserDefaults.standard.set(
+            blockedCentrals.map(\.uuidString).sorted(),
+            forKey: AppSettings.blockedCentralsKey
+        )
     }
 
     /// Make a subscribed, unblocked and unmuted host the one that receives input, replacing
