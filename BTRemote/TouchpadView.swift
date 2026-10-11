@@ -509,7 +509,7 @@
             @objc func handleThreeFingerTap() {
                 Haptics.tap(from: .trackpad)
                 let raw = UserDefaults.standard.string(forKey: AppSettings.threeFingerTapKey)
-                    ?? TrackpadGestureAction.spotlight.rawValue
+                    ?? GestureDefaults.threeFingerTap.rawValue
                 if let action = TrackpadGestureAction(rawValue: raw) {
                     onGestureAction(action)
                 }
@@ -518,7 +518,7 @@
             @objc func handleFourFingerTap() {
                 Haptics.tap(from: .trackpad)
                 let raw = UserDefaults.standard.string(forKey: AppSettings.fourFingerTapKey)
-                    ?? TrackpadGestureAction.controlCenter.rawValue
+                    ?? GestureDefaults.fourFingerTap.rawValue
                 if let action = TrackpadGestureAction(rawValue: raw) {
                     onGestureAction(action)
                 }
@@ -527,7 +527,7 @@
             @objc func handleSwipeUp() {
                 Haptics.tap(from: .trackpad)
                 let raw = UserDefaults.standard.string(forKey: AppSettings.threeFingerSwipeUpKey)
-                    ?? TrackpadGestureAction.appSwitcher.rawValue
+                    ?? GestureDefaults.threeFingerSwipeUp.rawValue
                 if let action = TrackpadGestureAction(rawValue: raw) {
                     onGestureAction(action)
                 }
@@ -536,7 +536,7 @@
             @objc func handleSwipeDown() {
                 Haptics.tap(from: .trackpad)
                 let raw = UserDefaults.standard.string(forKey: AppSettings.threeFingerSwipeDownKey)
-                    ?? TrackpadGestureAction.home.rawValue
+                    ?? GestureDefaults.threeFingerSwipeDown.rawValue
                 if let action = TrackpadGestureAction(rawValue: raw) {
                     onGestureAction(action)
                 }
@@ -545,7 +545,7 @@
             @objc func handleSwipeLeft() {
                 Haptics.tap(from: .trackpad)
                 let raw = UserDefaults.standard.string(forKey: AppSettings.threeFingerSwipeLeftKey)
-                    ?? TrackpadGestureAction.previousApp.rawValue
+                    ?? GestureDefaults.threeFingerSwipeLeft.rawValue
                 if let action = TrackpadGestureAction(rawValue: raw) {
                     onGestureAction(action)
                 }
@@ -554,7 +554,7 @@
             @objc func handleSwipeRight() {
                 Haptics.tap(from: .trackpad)
                 let raw = UserDefaults.standard.string(forKey: AppSettings.threeFingerSwipeRightKey)
-                    ?? TrackpadGestureAction.nextApp.rawValue
+                    ?? GestureDefaults.threeFingerSwipeRight.rawValue
                 if let action = TrackpadGestureAction(rawValue: raw) {
                     onGestureAction(action)
                 }
