@@ -45,7 +45,7 @@ struct KeyboardView: View {
     }
 
     private var pageSwitcher: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: ChipMetrics.rowSpacing) {
             ForEach(KeyboardPage.allCases) { page in
                 Button {
                     Haptics.tap(from: .keyboard)
@@ -55,17 +55,17 @@ struct KeyboardView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: page.icon)
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: ChipMetrics.iconSize, weight: .semibold))
                         Text(page.title)
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: ChipMetrics.iconSize, weight: .semibold))
                             .lineLimit(1)
                             .fixedSize(horizontal: true, vertical: false)
                     }
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 6)
+                    .padding(.vertical, ChipMetrics.labelPadding)
+                    .padding(.horizontal, ChipMetrics.labelPadding)
                     .frame(maxWidth: .infinity)
                     .background(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: ChipMetrics.cornerRadius)
                             .fill(selectedPage == page.rawValue ? Color.accentColor : groupFill)
                     )
                     .foregroundColor(selectedPage == page.rawValue ? .white : .primary)
@@ -78,11 +78,11 @@ struct KeyboardView: View {
                 hid.toggleVirtualKeyboard()
             } label: {
                 Image(systemName: "keyboard.chevron.compact.down")
-                    .font(.system(size: 13, weight: .semibold))
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 8)
+                    .font(.system(size: ChipMetrics.iconOnlySize, weight: .semibold))
+                    .padding(.vertical, ChipMetrics.labelPadding)
+                    .padding(.horizontal, ChipMetrics.iconOnlyPadding)
                     .background(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: ChipMetrics.cornerRadius)
                             .fill(groupFill)
                     )
                     .foregroundColor(.primary)
@@ -90,10 +90,8 @@ struct KeyboardView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(L10n.Keyboard.toggleOnscreenKeyboard)
         }
-        .padding(.horizontal, 8)
-        // no top padding: this page has no title bar above the switcher, so the
-        // switcher sits against the top edge and the keyboard gets the height back
-        .padding(.top, 0)
+        .padding(.horizontal, ChipMetrics.pageHorizontalPadding)
+        .padding(.top, ChipMetrics.pageTopPadding)
     }
 
     /// One tap moves to the remote page. Sits after the page buttons and before the
@@ -109,19 +107,19 @@ struct KeyboardView: View {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "gamecontroller")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: ChipMetrics.iconSize, weight: .semibold))
                 Text(L10n.Tab.remote)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: ChipMetrics.iconSize, weight: .semibold))
                     .lineLimit(1)
                     // The row is tight on the narrowest phones once this fifth button is
                     // in it, so the label shrinks rather than pushing the row past the edge.
                     .minimumScaleFactor(0.75)
             }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 6)
+            .padding(.vertical, ChipMetrics.labelPadding)
+            .padding(.horizontal, ChipMetrics.labelPadding)
             .frame(maxWidth: .infinity)
             .background(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: ChipMetrics.cornerRadius)
                     .fill(groupFill)
             )
             .foregroundColor(.primary)

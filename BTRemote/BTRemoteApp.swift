@@ -48,7 +48,7 @@ struct BTRemoteApp: App {
         /// The window is one, so one bit is enough, and it is never persisted: a relaunch
         /// starts with it clear, which is also what makes the launch path the only thing that
         /// decides what a relaunch advertises.
-        @State private var suspendedAdvertising = false
+        @State private var didSuspendPeripheral = false
     #endif
 
     private var preferredColorScheme: ColorScheme? {
@@ -95,7 +95,7 @@ struct BTRemoteApp: App {
         ///
         /// `isAdvertising` is the only thing consulted for whether to suspend, rather than
         /// `autoAdvertise` or `isHIDServiceAdded`: it is what says a host could really find
-        /// us. The resume is gated on `suspendedAdvertising` instead, which is what keeps it
+        /// us. The resume is gated on `didSuspendPeripheral` instead, which is what keeps it
         /// a resume rather than a way to start advertising: a peripheral the user never
         /// started has nothing to suspend and is never set, so nothing starts at launch, and
         /// the flag is not persisted, so a relaunch finds it clear and `autoAdvertise` alone
@@ -110,17 +110,24 @@ struct BTRemoteApp: App {
         private func _scenePhaseChanged(_ phase: ScenePhase) {
             switch phase {
             case .active:
-                guard suspendedAdvertising else { return }
-                suspendedAdvertising = false
+                guard didSuspendPeripheral else { return }
+                didSuspendPeripheral = false
                 lowEnergy.resume()
             case .inactive, .background:
                 // a lock or the app switcher passes through `.inactive` and may report only
                 // that, so both mean the app is no longer in front, which is when it has to
                 // let go of its hosts. Suspending is idempotent, so a second phase of the
                 // same departure can reach here with nothing left to do.
-                guard lowEnergy.isAdvertising else { return }
+                //
+                // The test is `isOnTheAir`, not `isAdvertising`. A host stays connected after
+                // the user taps Stop Advertising, so suspending on the advertising flag alone
+                // would leave that link — and the radio — alive for the whole time in the
+                // background, which is the wake-up this exists to end. It also covers the
+                // window while a resume is still installing services: not advertising yet,
+                // about to be, and a later background must still take it down.
+                guard lowEnergy.isOnTheAir else { return }
                 lowEnergy.suspend()
-                suspendedAdvertising = true
+                didSuspendPeripheral = true
             @unknown default:
                 break
             }

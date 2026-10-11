@@ -65,6 +65,9 @@ final class HIDPeripheral: NSObject, ObservableObject {
     private var hidServiceObj: CBMutableService?
     private var isHIDServiceAllowed = false
     private var isReadyToSendNotification = true
+    /// What `suspend` interrupted, so `resume` restores that rather than the maximum: a
+    /// suspension with the user's advertising already off must not come back on the air.
+    private var wasAdvertisingBeforeSuspend = false
 
     private var charsByReportID: [UInt8: CBMutableCharacteristic] = [:]
     private var bootMouseInputChar: CBMutableCharacteristic?
@@ -143,6 +146,23 @@ final class HIDPeripheral: NSObject, ObservableObject {
         isAdvertising = false
     }
 
+    /// Whether the peripheral is on the air in any sense: advertising, holding services a
+    /// host could be or already is connected to, or in the middle of bringing either up.
+    ///
+    /// This is the test for "is there something to take down", and `isAdvertising` alone is
+    /// not it. `stop()` stops advertising but leaves the links alone, so after the user taps
+    /// Stop Advertising the app is still reachable by a subscribed host while
+    /// `isAdvertising == false`; suspending on that flag would skip the teardown and leave
+    /// the link — and the radio — alive through the whole time in the background, which is
+    /// the wake-up this is here to end.
+    ///
+    /// `isHIDServiceAllowed` covers the last case: between `start()` and the services being
+    /// installed there is no advertising and no service yet, but the app is on its way up,
+    /// and a background landing in that window still has to take it down again.
+    var isOnTheAir: Bool {
+        isHIDServiceAllowed || isAdvertising || isHIDServiceAdded
+    }
+
     /// Suspend the peripheral: end advertising *and* the links hosts are holding, and leave
     /// a peripheral that `resume` rebuilds from nothing.
     ///
@@ -166,6 +186,12 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// than sitting on screen through the suspension (see `_tearDownPeripheral`).
     func suspend() {
         _trace("suspend")
+        // Remembered before the teardown clears it, so a resume restores what was actually
+        // running and not merely whatever the peripheral could be. A host can be connected
+        // after the user tapped Stop Advertising — services installed, advertising off —
+        // and that teardown still has to happen, but coming back must not turn advertising
+        // on for someone who switched it off.
+        wasAdvertisingBeforeSuspend = isAdvertising
         isHIDServiceAllowed = false
         _tearDownPeripheral()
     }
@@ -181,9 +207,21 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// Whether a resume is wanted at all is the caller's own question, and `BTRemoteApp`
     /// answers it with the bit it keeps for that: only what this app suspended is resumed,
     /// so a Stop Advertising the user tapped stays stopped and a launch resumes nothing.
+    ///
+    /// What comes back is what was running when the app left, not everything the peripheral
+    /// could be. A suspend that interrupted advertising restores it; one that interrupted
+    /// only a live link — services up, advertising already off because the user turned it
+    /// off — rebuilds the services and stays off the air, because that is the state it
+    /// found. Otherwise every trip to the background would switch advertising on for a user
+    /// who had switched it off.
     func resume() {
         _trace("resume")
-        start()
+        if wasAdvertisingBeforeSuspend {
+            start()
+        } else {
+            observeState()
+        }
+        wasAdvertisingBeforeSuspend = false
     }
 
     func promptPowerAlert() {
@@ -718,7 +756,14 @@ final class HIDPeripheral: NSObject, ObservableObject {
             return false
         }
         let accepted = pManager.updateValue(data, for: char, onSubscribedCentrals: recipients)
-        if !accepted {
+        if accepted {
+            // a report just reached a host, so the "nothing is receiving this" notice no longer
+            // describes anything. This is the ordinary path and it has to retract the notice
+            // itself: clearing it only in `drainPendingBroadcasts` left it stranded, because a
+            // teardown empties the parked queue, so after a suspend/resume the drain returns
+            // early and the notice had no way back off the screen.
+            _clearDroppedInputNoticeIfHeld()
+        } else {
             // the queue is full: keep this report, replacing only an older one of its own kind
             isReadyToSendNotification = false
             park(data, for: char, reportID: reportID, target: target)

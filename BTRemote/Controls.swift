@@ -3,6 +3,30 @@ import SwiftUI
 let groupFill = Color.secondary.opacity(0.16)
 let cellGap: CGFloat = 6
 
+/// Shared metrics for the pill controls that sit above the content: the page switcher
+/// on the keyboard page, the mode switch on both pages, and the collapse button. They
+/// are meant to read as one row of like controls, so their sizes live here rather than
+/// being spelled out at each call site — the mode switch had already drifted a point
+/// wider than the page buttons before this existed.
+enum ChipMetrics {
+    static let iconSize: CGFloat = 12
+    /// A chip with a label sizes itself with this padding.
+    static let labelPadding: CGFloat = 6
+    /// A chip that is only an icon has no label to widen it, so it pads further out to
+    /// end up the same height as its neighbours.
+    static let iconOnlyPadding: CGFloat = 8
+    static let iconOnlySize: CGFloat = 13
+    static let cornerRadius: CGFloat = 8
+    static let rowSpacing: CGFloat = 6
+    /// Side margin for a page's content, so the switcher and the panel below it line up
+    /// across the keyboard and remote pages. They were 8 and 12 before, which showed as a
+    /// jump in the content's left edge when switching tabs.
+    static let pageHorizontalPadding: CGFloat = 8
+    /// Gap above a page's top row. The pages carry no title bar, so this is the whole
+    /// distance from the safe area to the first control.
+    static let pageTopPadding: CGFloat = 4
+}
+
 /// fires once on press and once on release; shared by hold-to-send controls
 ///
 /// Release detection is the UIKit touch layer on iOS, not a SwiftUI gesture. `DragGesture`

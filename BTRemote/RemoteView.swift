@@ -53,8 +53,9 @@ struct RemoteView: View {
                 }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, ChipMetrics.pageHorizontalPadding)
+        .padding(.top, ChipMetrics.pageTopPadding)
+        .padding(.bottom, 8)
     }
 
     /// Mirrors the keyboard page's switch button: the same corner radius, fill and
@@ -70,15 +71,15 @@ struct RemoteView: View {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "keyboard")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: ChipMetrics.iconSize, weight: .semibold))
                 Text(L10n.Tab.keyboard)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: ChipMetrics.iconSize, weight: .semibold))
                     .lineLimit(1)
             }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 8)
+            .padding(.vertical, ChipMetrics.labelPadding)
+            .padding(.horizontal, ChipMetrics.labelPadding)
             .background(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: ChipMetrics.cornerRadius)
                     .fill(groupFill)
             )
             .foregroundColor(.primary)
