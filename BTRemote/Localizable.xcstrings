@@ -2234,13 +2234,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Advertise as a Bluetooth device automatically when the app opens."
+            "value": "Advertise automatically when the app opens. When off, nothing is advertised until you tap Start Advertising in Setup, so paired devices cannot reconnect on their own."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "应用打开时，自动作为蓝牙设备进行广播。"
+            "value": "应用打开时自动作为蓝牙设备广播。关闭后，在你于点按“连接”标签页中的“开始广播”之前，应用不会广播任何内容，已配对的设备也无法自行重连。"
           }
         }
       }
@@ -3696,13 +3696,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Show / Hide Dock"
+            "value": "Show / Hide Dock (iPadOS: ⌃⌥A)"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "显示/隐藏程序坞"
+            "value": "显示/隐藏程序坞（iPadOS：⌃⌥A）"
           }
         }
       }
@@ -3832,13 +3832,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Zoom (Ctrl+Wheel)"
+            "value": "Zoom (⌘= / ⌘-)"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "缩放（Ctrl+滚轮）"
+            "value": "缩放（⌘= / ⌘-）"
           }
         }
       }
@@ -3968,13 +3968,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rotate Counterclockwise (Cmd+L / Left)"
+            "value": "Rotate Counterclockwise (⌥⌘R)"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "逆时针旋转（Cmd+L / 左方向键）"
+            "value": "逆时针旋转（⌥⌘R）"
           }
         }
       }
@@ -3985,13 +3985,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rotate Clockwise (Cmd+R)"
+            "value": "Rotate Clockwise (⌘R — app refresh)"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "顺时针旋转（Cmd+R）"
+            "value": "顺时针旋转（⌘R — 应用刷新）"
           }
         }
       }
@@ -4417,6 +4417,74 @@
           "stringUnit": {
             "state": "translated",
             "value": "显示或隐藏屏幕键盘"
+          }
+        }
+      }
+    },
+    "gesture.action_mission_control": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mission Control (macOS: ⌃↑)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "调度中心（macOS：⌃↑）"
+          }
+        }
+      }
+    },
+    "gesture.action_app_expose": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App Exposé (macOS: ⌃↓)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App Exposé（macOS：⌃↓）"
+          }
+        }
+      }
+    },
+    "gesture.action_switch_space_left": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous Space (macOS: ⌃←)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上一个空间（macOS：⌃←）"
+          }
+        }
+      }
+    },
+    "gesture.action_switch_space_right": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next Space (macOS: ⌃→)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下一个空间（macOS：⌃→）"
           }
         }
       }

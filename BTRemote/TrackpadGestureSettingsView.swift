@@ -3,20 +3,20 @@ import SwiftUI
 struct TrackpadGestureSettingsView: View {
     @AppStorage(AppSettings.invertScrollKey) private var invertScroll = false
     @AppStorage(AppSettings.doubleTapDragKey) private var doubleTapDrag = true
-    @AppStorage(AppSettings.pinchGestureActionKey) private var pinchAction = TrackpadGestureAction.zoom.rawValue
-    @AppStorage(AppSettings.rotationGestureActionKey) private var rotateAction = TrackpadGestureAction.rotateRight.rawValue
+    @AppStorage(AppSettings.pinchGestureActionKey) private var pinchAction = GestureDefaults.pinch.rawValue
+    @AppStorage(AppSettings.rotationGestureActionKey) private var rotateAction = GestureDefaults.rotation.rawValue
 
-    @AppStorage(AppSettings.threeFingerSwipeUpKey) private var swipeUpAction = TrackpadGestureAction.appSwitcher.rawValue
-    @AppStorage(AppSettings.threeFingerSwipeDownKey) private var swipeDownAction = TrackpadGestureAction.home.rawValue
-    @AppStorage(AppSettings.threeFingerSwipeLeftKey) private var swipeLeftAction = TrackpadGestureAction.previousApp.rawValue
-    @AppStorage(AppSettings.threeFingerSwipeRightKey) private var swipeRightAction = TrackpadGestureAction.nextApp.rawValue
-    @AppStorage(AppSettings.threeFingerTapKey) private var threeFingerTapAction = TrackpadGestureAction.spotlight.rawValue
+    @AppStorage(AppSettings.threeFingerSwipeUpKey) private var swipeUpAction = GestureDefaults.threeFingerSwipeUp.rawValue
+    @AppStorage(AppSettings.threeFingerSwipeDownKey) private var swipeDownAction = GestureDefaults.threeFingerSwipeDown.rawValue
+    @AppStorage(AppSettings.threeFingerSwipeLeftKey) private var swipeLeftAction = GestureDefaults.threeFingerSwipeLeft.rawValue
+    @AppStorage(AppSettings.threeFingerSwipeRightKey) private var swipeRightAction = GestureDefaults.threeFingerSwipeRight.rawValue
+    @AppStorage(AppSettings.threeFingerTapKey) private var threeFingerTapAction = GestureDefaults.threeFingerTap.rawValue
 
-    @AppStorage(AppSettings.fourFingerSwipeUpKey) private var fourSwipeUpAction = TrackpadGestureAction.dock.rawValue
-    @AppStorage(AppSettings.fourFingerSwipeDownKey) private var fourSwipeDownAction = TrackpadGestureAction.home.rawValue
-    @AppStorage(AppSettings.fourFingerSwipeLeftKey) private var fourSwipeLeftAction = TrackpadGestureAction.previousApp.rawValue
-    @AppStorage(AppSettings.fourFingerSwipeRightKey) private var fourSwipeRightAction = TrackpadGestureAction.nextApp.rawValue
-    @AppStorage(AppSettings.fourFingerTapKey) private var fourFingerTapAction = TrackpadGestureAction.controlCenter.rawValue
+    @AppStorage(AppSettings.fourFingerSwipeUpKey) private var fourSwipeUpAction = GestureDefaults.fourFingerSwipeUp.rawValue
+    @AppStorage(AppSettings.fourFingerSwipeDownKey) private var fourSwipeDownAction = GestureDefaults.fourFingerSwipeDown.rawValue
+    @AppStorage(AppSettings.fourFingerSwipeLeftKey) private var fourSwipeLeftAction = GestureDefaults.fourFingerSwipeLeft.rawValue
+    @AppStorage(AppSettings.fourFingerSwipeRightKey) private var fourSwipeRightAction = GestureDefaults.fourFingerSwipeRight.rawValue
+    @AppStorage(AppSettings.fourFingerTapKey) private var fourFingerTapAction = GestureDefaults.fourFingerTap.rawValue
 
     var body: some View {
         Form {
