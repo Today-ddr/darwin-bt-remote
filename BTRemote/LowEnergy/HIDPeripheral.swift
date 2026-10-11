@@ -49,6 +49,16 @@ final class HIDPeripheral: NSObject, ObservableObject {
     var advertiseLocalName: String = UserDefaults.standard.string(forKey: AppSettings.advertisedNameKey) ?? L10n.Bluetooth.advertisedName
 
     private let log = Logger(subsystem: "io.github.jqssun.btremote", category: "HIDPeripheral")
+    /// The manager everything installed here hangs off. Releasing it — which the teardowns
+    /// below do — is the only way to take the published services down and with them the links
+    /// of the hosts that hold them; there is no way to disconnect a central directly.
+    ///
+    /// It is also the identity every delegate callback is checked against: a callback can
+    /// outlive the manager that queued it, since CoreBluetooth offers neither an invalidate
+    /// nor a cancel for `CBPeripheralManager`, so each callback drops one that is not the
+    /// manager held right now. Without that check a late callback from a released manager
+    /// would install services and advertise on the peripheral that replaced it, or let a
+    /// subscriber of the old one claim control of the new one.
     private var pManager: CBPeripheralManager?
     private var batteryServiceObj: CBMutableService?
     private var deviceInfoServiceObj: CBMutableService?
@@ -88,11 +98,7 @@ final class HIDPeripheral: NSObject, ObservableObject {
     func start() {
         isHIDServiceAllowed = true
         if pManager == nil {
-            pManager = CBPeripheralManager(
-                delegate: self,
-                queue: nil,
-                options: [CBPeripheralManagerOptionShowPowerAlertKey: true]
-            )
+            _makeManager(showPowerAlert: true)
         } else if state == .poweredOn {
             if isHIDServiceAdded {
                 startAdvertisingNow()
@@ -112,24 +118,72 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// installed (and advertising begins) only through `start`.
     func observeState() {
         guard pManager == nil else { return }
+        _makeManager(showPowerAlert: false)
+    }
+
+    /// Creates the manager both public ways in need, differing only in the power alert.
+    private func _makeManager(showPowerAlert: Bool) {
         pManager = CBPeripheralManager(
             delegate: self,
             queue: nil,
-            options: [CBPeripheralManagerOptionShowPowerAlertKey: false]
+            options: [CBPeripheralManagerOptionShowPowerAlertKey: showPowerAlert]
         )
     }
 
     /// Stop advertising; the way back in is `start`, which resumes from whatever point this
-    /// left off. It is called both by the user's Stop Advertising and by the app suspending
-    /// advertising on leaving the foreground, and it deliberately does not tell the two
-    /// apart: "we stopped it, bring it back" is the caller's own state — the scene phase is
-    /// what knows it — and keeping that here would make a user's own stop indistinguishable
-    /// from one that is meant to be undone. A host that is still subscribed keeps its link:
-    /// this stops advertising, it does not end the connection.
+    /// left off. It is the user's own Stop Advertising — leaving the foreground goes through
+    /// `suspend` instead, which ends the hosts' links as well. It deliberately keeps no
+    /// opinion about why it was called: "we stopped it, bring it back" is the caller's own
+    /// state — the scene phase is what knows it — and keeping that here would make a user's
+    /// own stop indistinguishable from one that is meant to be undone. A host that is still
+    /// subscribed keeps its link: this stops advertising, it does not end the connection.
     func stop() {
         isHIDServiceAllowed = false
         pManager?.stopAdvertising()
         isAdvertising = false
+    }
+
+    /// Suspend the peripheral: end advertising *and* the links hosts are holding, and leave
+    /// a peripheral that `resume` rebuilds from nothing.
+    ///
+    /// `stop()` is not enough for this. It stops advertising, which only takes the app off
+    /// the air for hosts that do not have it yet: a host that is already subscribed keeps
+    /// its link, and a link that outlives the foreground keeps the radio busy — which is the
+    /// wake-up this exists to end. CoreBluetooth gives a peripheral no way to disconnect a
+    /// central, so the links come down with the manager that holds them, which is the
+    /// teardown `_resetForRestart` has always performed; `_tearDownPeripheral` is that body,
+    /// with what it takes down and what it deliberately leaves standing written out.
+    ///
+    /// It does not call that restart, because a suspend is not one: a restart is the power
+    /// alert's "the radio was unusable, start over" and its caller starts again in the same
+    /// breath, while a suspend is a stop with no promise of a return. The flag is where the
+    /// difference shows: `isHIDServiceAllowed` goes false here, so a service cannot be
+    /// installed into a peripheral that is meant to be down — a late callback from the
+    /// manager being released, say. `start`/`resume` is what sets it true again.
+    ///
+    /// Nothing is surfaced by a suspend. Input stops because the app was taken away, not
+    /// because it went nowhere, and the dropped-input notice goes with the teardown rather
+    /// than sitting on screen through the suspension (see `_tearDownPeripheral`).
+    func suspend() {
+        _trace("suspend")
+        isHIDServiceAllowed = false
+        _tearDownPeripheral()
+    }
+
+    /// Bring back what `suspend` took down, and say again that the app wants to be found.
+    ///
+    /// The whole of a resume is `start()`: with the manager gone that builds one, and the
+    /// install chain follows from the delegate callbacks — services, then advertising —
+    /// exactly as it does at launch. So this is an intent and nothing else: advertising is
+    /// not claimed here, `isAdvertising` is neither set nor cleared by it, and a resume that
+    /// has returned has not necessarily advertised yet.
+    ///
+    /// Whether a resume is wanted at all is the caller's own question, and `BTRemoteApp`
+    /// answers it with the bit it keeps for that: only what this app suspended is resumed,
+    /// so a Stop Advertising the user tapped stays stopped and a launch resumes nothing.
+    func resume() {
+        _trace("resume")
+        start()
     }
 
     func promptPowerAlert() {
@@ -138,7 +192,42 @@ final class HIDPeripheral: NSObject, ObservableObject {
         start()
     }
 
+    /// The power alert's way of starting over: the radio reported something other than
+    /// `.poweredOn`, so nothing installed on the old manager is trusted and the whole
+    /// peripheral — services and links with it — is taken apart before `start` builds it
+    /// again. That is the same teardown a suspend performs, minus the one thing that makes a
+    /// suspend a stop: `isHIDServiceAllowed` is left exactly as it was, because this path
+    /// starts again immediately.
     private func _resetForRestart() {
+        _tearDownPeripheral()
+    }
+
+    /// Takes the peripheral apart: releases the manager — which is what removes the
+    /// published services and drops every host's link, the only way to drop one — and then
+    /// clears the objects and bookkeeping that were built around it, so a later `start`
+    /// rebuilds from nothing. It is the body `_resetForRestart` has always had, shared with
+    /// `suspend` so the two cannot drift apart: both need the chain gone, and neither may
+    /// keep anything that names the old manager's services, characteristics or subscribers.
+    ///
+    /// What it deliberately leaves standing is part of its contract, because both callers
+    /// depend on it:
+    ///
+    /// - `blockedCentrals` — the hosts the user removed. That set is the user's own decision
+    ///   and is persisted for exactly that reason, so it outlives any link; clearing it here
+    ///   would resurrect a host the user removed, which is the bug the persistent list was
+    ///   written to fix. A restart already kept it and a suspend must too.
+    /// - `state` — the last state the radio reported. There is a manager again as soon as
+    ///   `start` runs (which is what `resume` is for), and until its first callback lands,
+    ///   this is what the Setup page's Start Advertising button reads to choose between
+    ///   starting and complaining about the radio: a teardown that reset it to `.unknown`
+    ///   would send that tap down the power-alert branch for a radio that is on.
+    ///   `observeState` exists for the same reason at launch.
+    /// - the state that belongs to the device rather than to a link: `advertiseLocalName`,
+    ///   `batteryLevel`, `keyboardLEDs` and the cached reports.
+    ///
+    /// `isHIDServiceAllowed` is not touched here either: the two callers mean different
+    /// things by it, and each sets it the way its own semantics require.
+    private func _tearDownPeripheral() {
         pManager?.stopAdvertising()
         pManager = nil
         isAdvertising = false
@@ -155,20 +244,31 @@ final class HIDPeripheral: NSObject, ObservableObject {
         bootKeyboardInputChar = nil
         bootKeyboardOutputChar = nil
         charsByReportID.removeAll()
+        // link state, all of it: the subscribers, the live `CBCentral` objects and the
+        // connected set were the old manager's knowledge and do not survive releasing it
         subscribedCentrals.removeAll()
+        // a mute is a filter on a link rather than a decision about the host — it already
+        // goes when the host unsubscribes (`didUnsubscribeFrom`) — so it goes with the link
+        // here too. Only the block list outlives a link (see the note above).
         inactiveCentrals.removeAll()
         connectedCentrals.removeAll()
         centralObjects.removeAll()
-        // the block list is deliberately not cleared here: it is what the user asked for, and
-        // `_resetForRestart` is a Bluetooth restart (the power alert), not a request to undo
-        // it. The set stays as loaded and is rewritten by the next change to it, so the
-        // persisted list is untouched by a restart too.
+        // control starts clean. No host is connected after a teardown, so the first host to
+        // subscribe claims the idle peripheral the same way it does on a cold start —
+        // `didSubscribeTo` claims only when nothing holds control, so there is nobody for a
+        // reconnect to steal it from. Leaving the old host active would point control at a
+        // host that is gone, and a resume would then read as input being routed while
+        // nothing is subscribed.
+        activeCentral = nil
         subscribeOrder.removeAll()
         subscribeCounter = 0
+        // the notice says reports are being dropped. A teardown ends every link on purpose,
+        // so leaving it up would describe a deliberate act, and nothing would retract it
+        // while no host is subscribed: `_clearDroppedInputNoticeIfHeld` needs a report to
+        // reach a host, which cannot happen until one subscribes again.
         if lastError == Self.droppedInputNotice {
             lastError = nil
         }
-        activeCentral = nil
     }
 
     func sendMouse(_ report: MouseReport) {
@@ -762,6 +862,7 @@ final class HIDPeripheral: NSObject, ObservableObject {
 
 extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
     func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
+        guard peripheral === pManager else { return }
         state = peripheral.state
         _trace("CB state -> \(peripheral.state.rawValue)")
         if peripheral.state == .poweredOn, isHIDServiceAllowed, !isHIDServiceAdded {
@@ -773,6 +874,10 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
     }
 
     func peripheralManager(_ peripheral: CBPeripheralManager, didAdd service: CBService, error: Error?) {
+        // this is the callback a teardown can arrive in the middle of. Dropping it does not
+        // strand the install chain: what it leaves behind was cleared with the manager, and
+        // the `start` after the teardown lays it again from the first service.
+        guard peripheral === pManager else { return }
         if let error {
             log.error("didAddService(\(service.uuid)) error: \(error.localizedDescription, privacy: .public)")
             lastError = error.localizedDescription
@@ -795,6 +900,7 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
     }
 
     func peripheralManagerDidStartAdvertising(_ peripheral: CBPeripheralManager, error: Error?) {
+        guard peripheral === pManager else { return }
         if let error {
             isAdvertising = false
             lastError = error.localizedDescription
@@ -810,6 +916,9 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
         central: CBCentral,
         didSubscribeTo characteristic: CBCharacteristic
     ) {
+        // a host working the old manager, mid-teardown: nothing it does may claim control or
+        // be replayed a report, so it is dropped rather than booked against the new manager
+        guard peripheral === pManager else { return }
         _trackInteraction(from: central)
         subscribeCounter += 1
         subscribeOrder[central.identifier] = subscribeCounter
@@ -852,6 +961,7 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
         central: CBCentral,
         didUnsubscribeFrom characteristic: CBCharacteristic
     ) {
+        guard peripheral === pManager else { return }
         _trace("unsubscribe: \(central.identifier) <- \(characteristic.uuid)")
         guard var chars = subscribedCentrals[central.identifier] else { return }
         chars.remove(characteristic.uuid)
@@ -881,11 +991,13 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
     }
 
     func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
+        guard peripheral === pManager else { return }
         isReadyToSendNotification = true
         drainPendingBroadcasts()
     }
 
     func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveRead request: CBATTRequest) {
+        guard peripheral === pManager else { return }
         _trace("read: \(request.central.identifier) -> \(request.characteristic.uuid)")
         _trackInteraction(from: request.central)
         scheduleServiceChanged()
@@ -923,6 +1035,7 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
     }
 
     func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
+        guard peripheral === pManager else { return }
         for request in requests {
             _trace("write: \(request.central.identifier) -> \(request.characteristic.uuid)")
             _trackInteraction(from: request.central)

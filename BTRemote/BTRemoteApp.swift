@@ -36,7 +36,7 @@ struct BTRemoteApp: App {
         /// that is about a finger being interrupted, not about this, and stays as it is.
         @Environment(\.scenePhase) private var scenePhase
 
-        /// Whether this app suspended its own advertising when the scene stopped being active.
+        /// Whether this app suspended its own peripheral when the scene stopped being active.
         ///
         /// What it separates is a suspension from the user's own Stop Advertising: only a
         /// suspension is resumed, so the button is not undone by leaving the app. It lives
@@ -46,7 +46,8 @@ struct BTRemoteApp: App {
         /// `isHIDServiceAllowed` ("services may be installed") and from being mistaken for
         /// advertising that dropped on its own — a Bluetooth teardown is not resumed either.
         /// The window is one, so one bit is enough, and it is never persisted: a relaunch
-        /// starts with it clear.
+        /// starts with it clear, which is also what makes the launch path the only thing that
+        /// decides what a relaunch advertises.
         @State private var suspendedAdvertising = false
     #endif
 
@@ -80,35 +81,45 @@ struct BTRemoteApp: App {
     }
 
     #if os(iOS)
-        /// The scene leaving the foreground stops advertising; coming back resumes only what
-        /// this app itself stopped, so a Stop Advertising the user tapped is not undone by
-        /// backgrounding the app and coming back.
+        /// The scene leaving the foreground suspends the peripheral, and coming back resumes
+        /// only what this app itself suspended, so a Stop Advertising the user tapped is not
+        /// undone by backgrounding the app and coming back.
         ///
-        /// `isAdvertising` is the only thing consulted, rather than `autoAdvertise` or
-        /// `isHIDServiceAdded`: it is what says a host could really find us, and it also keeps
-        /// the resume from becoming a back door into advertising at launch, since it is false
-        /// until advertising actually starts. Resuming calls `start()`, the same way in the
-        /// launch path uses, and issues an intent rather than a fact: a manager coming up or a
-        /// service being installed both finish in a callback, so advertising is never claimed
-        /// here — `peripheralManagerDidStartAdvertising` is what settles that, exactly as it
-        /// does after a tap in Setup. Nothing is narrowed to a smaller call, because `start()`
-        /// is already idempotent and the narrower pieces are private. A host that is still
-        /// subscribed keeps its link either way: only advertising stops, so a bounded
-        /// suspension does not have to be an actual Bluetooth restart to bring the app back,
-        /// and the radio is never left unreadable to Setup.
+        /// Suspending takes the peripheral down and ends the links with it. Stopping
+        /// advertising alone is not enough: a host that was already connected keeps its link
+        /// through the background, and a link that outlives the foreground is exactly what
+        /// keeps the radio busy and wakes a paired host. A host that is dropped this way is
+        /// rediscoverable — the app advertises again on the way back in — and the user's own
+        /// state survives it: the persisted removal list in particular is kept, so a
+        /// suspended host cannot resurrect one the user removed.
+        ///
+        /// `isAdvertising` is the only thing consulted for whether to suspend, rather than
+        /// `autoAdvertise` or `isHIDServiceAdded`: it is what says a host could really find
+        /// us. The resume is gated on `suspendedAdvertising` instead, which is what keeps it
+        /// a resume rather than a way to start advertising: a peripheral the user never
+        /// started has nothing to suspend and is never set, so nothing starts at launch, and
+        /// the flag is not persisted, so a relaunch finds it clear and `autoAdvertise` alone
+        /// decides. The two halves of a phase change are the same asymmetry the old stop/
+        /// start pair had — suspension is conditional on being on the air, resume on having
+        /// been this app's own doing.
+        ///
+        /// Both calls issue an intent and claim nothing here: `resume()` runs `start()`, whose
+        /// manager and service installs complete in delegate callbacks, so advertising is
+        /// not claimed until `peripheralManagerDidStartAdvertising` says so. A force-quit
+        /// runs none of this.
         private func _scenePhaseChanged(_ phase: ScenePhase) {
             switch phase {
             case .active:
                 guard suspendedAdvertising else { return }
                 suspendedAdvertising = false
-                lowEnergy.start()
+                lowEnergy.resume()
             case .inactive, .background:
                 // a lock or the app switcher passes through `.inactive` and may report only
                 // that, so both mean the app is no longer in front, which is when it has to
-                // stop. Stopping is idempotent, so a second phase of the same departure can
-                // reach here with nothing left to do.
+                // let go of its hosts. Suspending is idempotent, so a second phase of the
+                // same departure can reach here with nothing left to do.
                 guard lowEnergy.isAdvertising else { return }
-                lowEnergy.stop()
+                lowEnergy.suspend()
                 suspendedAdvertising = true
             @unknown default:
                 break
@@ -137,10 +148,12 @@ struct BTRemoteApp: App {
                             lowEnergy.observeState()
                         }
                     }
-                    // a host that finds this app wakes to a radio that is still advertising, so
-                    // advertising does not outlive the foreground. A force-quit runs none of
-                    // this, and the launch path above is the only thing that decides what
-                    // relaunching does — that is `autoAdvertise`, not this.
+                    // a host that finds this app wakes to a radio that is still advertising, and
+                    // a link that outlives the foreground keeps waking it, so neither outlives
+                    // the foreground: leaving it suspends the peripheral and takes the links
+                    // with it. A force-quit runs none of this, and the launch path above is the
+                    // only thing that decides what relaunching does — that is `autoAdvertise`,
+                    // not this.
                     .onChange(of: scenePhase) { phase in
                         _scenePhaseChanged(phase)
                     }
