@@ -119,6 +119,13 @@ final class HIDPeripheral: NSObject, ObservableObject {
         )
     }
 
+    /// Stop advertising; the way back in is `start`, which resumes from whatever point this
+    /// left off. It is called both by the user's Stop Advertising and by the app suspending
+    /// advertising on leaving the foreground, and it deliberately does not tell the two
+    /// apart: "we stopped it, bring it back" is the caller's own state — the scene phase is
+    /// what knows it — and keeping that here would make a user's own stop indistinguishable
+    /// from one that is meant to be undone. A host that is still subscribed keeps its link:
+    /// this stops advertising, it does not end the connection.
     func stop() {
         isHIDServiceAllowed = false
         pManager?.stopAdvertising()
