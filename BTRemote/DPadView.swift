@@ -32,6 +32,7 @@ struct DPadView: View {
     private func wedge(_ key: ConsumerKey, _ start: Double, _ end: Double, _ label: LocalizedStringKey) -> some View {
         PressableShape(
             shape: Wedge(start: start, end: end),
+            region: { Wedge(start: start, end: end).path(in: $0) },
             onPress: { onPress(ConsumerReport(key: key)) },
             onRelease: onRelease
         )
@@ -49,6 +50,7 @@ struct DPadView: View {
     private var center: some View {
         PressableShape(
             shape: Circle(),
+            region: { Circle().path(in: $0) },
             onPress: { onPress(ConsumerReport(key: .menuPick)) },
             onRelease: onRelease,
             highlight: Color.primary.opacity(0.1)
@@ -58,8 +60,18 @@ struct DPadView: View {
     }
 }
 
+/// A control that is pressed through its own shape rather than its frame.
+///
+/// `region` is how the press knows where the shape is: the four wedges and the centre circle
+/// all live in one square, so a frame-shaped press would let only the topmost take anything
+/// and leave the rest dead. The region is the same path the shape draws, tested by the touch
+/// layer's `point(inside:with:)` and handed to SwiftUI's hit testing as a `contentShape`, so
+/// a point outside the shape goes to whatever is behind it instead of being swallowed here.
+/// It is a separate closure rather than the `shape` itself because the type has to erase to
+/// something the layer can hold.
 private struct PressableShape<S: Shape>: View {
     let shape: S
+    let region: @Sendable (CGRect) -> Path
     let onPress: () -> Void
     let onRelease: () -> Void
     var highlight: Color = .primary.opacity(0.14)
@@ -69,7 +81,7 @@ private struct PressableShape<S: Shape>: View {
         shape
             .fill(pressed ? highlight : .clear)
             .contentShape(shape)
-            .modifier(PressGesture(onPress: onPress, onRelease: onRelease, pressed: $pressed))
+            .modifier(PressGesture(onPress: onPress, onRelease: onRelease, pressed: $pressed, region: region))
             .accessibilityElement()
             .accessibilityAddTraits(.isButton)
     }

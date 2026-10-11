@@ -145,6 +145,19 @@
             c.onRotate = onRotate
         }
 
+        /// The surface is being torn down — the page turned, the layout branch changed, the
+        /// panel went away — and a gesture recogniser whose view leaves the hierarchy is
+        /// reset rather than ended, so the action method carrying `.ended` / `.cancelled` is
+        /// not called at all. That is the same defect the keyboard page fixes for touches,
+        /// in the gesture recogniser's version of it: a drag that was reporting the left
+        /// button as held has no terminal event, so the release has to come from the
+        /// teardown instead. Everything the coordinator accumulated is given up here, in one
+        /// place, and releasing twice is harmless — a drag that already ended leaves nothing
+        /// to release.
+        static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
+            coordinator.releaseEverything()
+        }
+
         @MainActor
         final class Coordinator: NSObject, UIGestureRecognizerDelegate {
             var moveSensitivity: CGFloat = 1
@@ -304,6 +317,16 @@
             /// Ends the two-finger gesture outright — no lingering lock-out. The
             /// old code held a flag for 150ms after the fingers lifted, which is
             /// what made the surface feel stuck between gestures.
+            ///
+            /// Every piece of two-finger state is in here, cancellation included:
+            /// the accumulator is what `handleScroll` carries between updates, the
+            /// baseline is what the pinch measures the spread against, and the streak and
+            /// the latch are what decide ownership. A cancelled gesture reaches this too,
+            /// through each handler's `.ended, .cancelled` case, so a latch cannot outlive
+            /// the touches that set it and block the next pair — a `pinchHasLatched` left
+            /// true would make `twoFingerOwner()` return `.pinch` forever, which reads as
+            /// a dead surface: the scroll handler's guard drops every update and the
+            /// rotation handler's `.idle` test never passes.
             private func endTwoFingerGesture() {
                 scrollAccumulator = 0
                 pinchBaselineSeparation = nil
@@ -311,10 +334,28 @@
                 pinchHasLatched = false
             }
 
+            /// Everything the surface is holding, given up at once. Called from
+            /// `dismantleUIView`, where a recogniser is reset rather than ended and the
+            /// handlers that would normally clean up are never called: the view leaves the
+            /// hierarchy, UIKit resets its recognisers, and no action message follows. The
+            /// release for a drag in flight and the reset of the two-finger state both have
+            /// to happen here for that reason.
+            ///
+            /// Running when nothing is held is harmless: `endDrag` returns early unless a
+            /// drag is live, and the two-finger reset is assignments to defaults.
+            func releaseEverything() {
+                endDrag()
+                endTwoFingerGesture()
+            }
+
             @objc func handleMove(_ pan: UIPanGestureRecognizer) {
-                guard let view = pan.view else { return }
+                // The `view` guard is per-case rather than up front: `UIGestureRecognizer.view`
+                // is weak and already nil once the view is being dismantled, and a terminal
+                // event that arrives at that moment must still run the reset. Guarding the
+                // whole method on it would drop the one event that clears the drag.
                 switch pan.state {
                 case .began:
+                    guard let view = pan.view else { return }
                     if doubleTapDragEnabled {
                         let now = CACurrentMediaTime()
                         let loc = pan.location(in: view)
@@ -327,6 +368,7 @@
                         }
                     }
                 case .changed:
+                    guard let view = pan.view else { return }
                     let t = pan.translation(in: view)
                     let dx = HIDInput.clamp(t.x * moveSensitivity)
                     let dy = HIDInput.clamp(t.y * moveSensitivity)
@@ -334,22 +376,36 @@
                         onMove(dx, dy, isDragging)
                         pan.setTranslation(.zero, in: view)
                     }
-                case .ended, .cancelled:
-                    if isDragging {
-                        isDragging = false
-                        onDragEnd()
-                    }
+                // `.ended` and `.cancelled` report the release; `.failed` cannot follow a
+                // `.began`, but it is listed so that a drag can never be left without a
+                // terminal event whatever the state machine does.
+                case .ended, .cancelled, .failed:
+                    endDrag()
                 default:
                     break
                 }
             }
 
+            /// Give up the left button a double-tap drag is holding, once. The drag is the
+            /// only one-finger state that reaches the host — `onMove` reports it as the left
+            /// button being down — so this is the release that has to run, and it runs from
+            /// the gesture's terminal event and from the teardown both, which is why it
+            /// guards on `isDragging` rather than being called unconditionally.
+            private func endDrag() {
+                guard isDragging else { return }
+                isDragging = false
+                onDragEnd()
+            }
+
             @objc func handleScroll(_ pan: UIPanGestureRecognizer) {
-                guard let view = pan.view else { return }
+                // No `view` guard up front, for the reason in `handleMove`: a terminal event
+                // arriving while the view is nil still has to reset the two-finger state, and
+                // guarding the method would drop it.
                 switch pan.state {
                 case .began:
                     scrollAccumulator = 0
                 case .changed:
+                    guard let view = pan.view else { return }
                     // A pinch that latched first owns the touches, so the pan that
                     // drifts alongside it must not also scroll. The translation is
                     // still cleared so nothing is delivered late if the pan
@@ -369,7 +425,7 @@
                         // One detent per emitted wheel step; Haptics throttles the rate.
                         Haptics.scrollTick()
                     }
-                case .ended, .cancelled:
+                case .ended, .cancelled, .failed:
                     endTwoFingerGesture()
                 default:
                     break
@@ -405,7 +461,7 @@
                         // was taken rather than from where the pinch began.
                         pinchBaselineSeparation = separation
                     }
-                case .ended, .cancelled:
+                case .ended, .cancelled, .failed:
                     endTwoFingerGesture()
                 default:
                     break
@@ -425,7 +481,7 @@
                         onRotate(delta)
                         rot.rotation = 0
                     }
-                case .ended, .cancelled:
+                case .ended, .cancelled, .failed:
                     endTwoFingerGesture()
                 default:
                     break
@@ -441,7 +497,12 @@
 
             @objc func handleRight() {
                 lastTapTime = 0
-                isDragging = false
+                // A two-finger tap that lands while a double-tap drag is in flight ends the
+                // drag: `isDragging` was cleared without the release going out, so a host
+                // that was being dragged by an earlier one-finger gesture kept the left
+                // button down until something else cleared it. The release has to precede
+                // the right click, because it reports the button set as it is now.
+                endDrag()
                 onRightClick()
             }
 
@@ -502,7 +563,7 @@
             @objc func handleFourSwipeUp() {
                 Haptics.tap(from: .trackpad)
                 let raw = UserDefaults.standard.string(forKey: AppSettings.fourFingerSwipeUpKey)
-                    ?? TrackpadGestureAction.dock.rawValue
+                    ?? GestureDefaults.fourFingerSwipeUp.rawValue
                 if let action = TrackpadGestureAction(rawValue: raw) {
                     onGestureAction(action)
                 }
@@ -511,7 +572,7 @@
             @objc func handleFourSwipeDown() {
                 Haptics.tap(from: .trackpad)
                 let raw = UserDefaults.standard.string(forKey: AppSettings.fourFingerSwipeDownKey)
-                    ?? TrackpadGestureAction.home.rawValue
+                    ?? GestureDefaults.fourFingerSwipeDown.rawValue
                 if let action = TrackpadGestureAction(rawValue: raw) {
                     onGestureAction(action)
                 }
@@ -520,7 +581,7 @@
             @objc func handleFourSwipeLeft() {
                 Haptics.tap(from: .trackpad)
                 let raw = UserDefaults.standard.string(forKey: AppSettings.fourFingerSwipeLeftKey)
-                    ?? TrackpadGestureAction.previousApp.rawValue
+                    ?? GestureDefaults.fourFingerSwipeLeft.rawValue
                 if let action = TrackpadGestureAction(rawValue: raw) {
                     onGestureAction(action)
                 }
@@ -529,7 +590,7 @@
             @objc func handleFourSwipeRight() {
                 Haptics.tap(from: .trackpad)
                 let raw = UserDefaults.standard.string(forKey: AppSettings.fourFingerSwipeRightKey)
-                    ?? TrackpadGestureAction.nextApp.rawValue
+                    ?? GestureDefaults.fourFingerSwipeRight.rawValue
                 if let action = TrackpadGestureAction(rawValue: raw) {
                     onGestureAction(action)
                 }

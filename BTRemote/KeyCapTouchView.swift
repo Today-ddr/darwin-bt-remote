@@ -57,6 +57,20 @@ final class KeyTouchCount: ObservableObject {
         /// itself, that layer would call the surface empty while a key still had a finger
         /// down, and clear the key. The shared count is what knows better.
         var tracksSurface = false
+        /// The part of the layer's frame that may take a touch, in the layer's own
+        /// coordinates. `nil` (the default) is the whole frame — every key cap and every
+        /// rectangular hold button — and the keys are why it stays the default: they tile the
+        /// surface without overlapping, so a frame is already the right region and nothing
+        /// about them changes here.
+        ///
+        /// A control that is *not* a rectangle has to say where it is, because four or five of
+        /// them are routinely stacked in one `ZStack` with identical frames — the D-pad's four
+        /// arcs and its centre button do exactly that. Frame-based hit testing would let only
+        /// the topmost one ever be pressed, and its neighbours would be dead. The layer tests
+        /// this region in `point(inside:with:)`, so UIKit's own hit testing lands on the one
+        /// layer whose region contains the point and the others decline it. The region is the
+        /// same path the control draws, so the two cannot disagree about where the control is.
+        var region: (@Sendable (CGRect) -> Path)?
 
         func makeUIView(context: Context) -> TouchView {
             let view = TouchView()
@@ -64,13 +78,19 @@ final class KeyTouchCount: ObservableObject {
             // the labelled key underneath stays the accessible element
             view.isAccessibilityElement = false
             view.accessibilityElementsHidden = true
-            view.bind(touches: touches, onFirstTouch: onFirstTouch, onLastTouch: onLastTouch, tracksSurface: tracksSurface)
+            view.bind(
+                touches: touches, onFirstTouch: onFirstTouch, onLastTouch: onLastTouch,
+                tracksSurface: tracksSurface, region: region
+            )
             return view
         }
 
         func updateUIView(_ view: TouchView, context: Context) {
             // rebind so the callbacks stay pointed at the live key state
-            view.bind(touches: touches, onFirstTouch: onFirstTouch, onLastTouch: onLastTouch, tracksSurface: tracksSurface)
+            view.bind(
+                touches: touches, onFirstTouch: onFirstTouch, onLastTouch: onLastTouch,
+                tracksSurface: tracksSurface, region: region
+            )
         }
 
         /// Tracks the fingers on this layer and reports the transitions.
@@ -80,17 +100,30 @@ final class KeyTouchCount: ObservableObject {
             private var onFirstTouch: () -> Void = {}
             private var onLastTouch: () -> Void = {}
             private var tracksSurface = false
+            private var region: (@Sendable (CGRect) -> Path)?
 
             func bind(
                 touches: KeyTouchCount,
                 onFirstTouch: @escaping () -> Void,
                 onLastTouch: @escaping () -> Void,
-                tracksSurface: Bool
+                tracksSurface: Bool,
+                region: (@Sendable (CGRect) -> Path)? = nil
             ) {
                 count = touches
                 self.onFirstTouch = onFirstTouch
                 self.onLastTouch = onLastTouch
                 self.tracksSurface = tracksSurface
+                self.region = region
+            }
+
+            /// Refuse touches outside the control's region, so a shaped control's frame does
+            /// not claim the parts of the square it does not draw — and, when several shaped
+            /// controls share a frame, so each one only ever takes the touches that are
+            /// genuinely its own. `nil` accepts the whole frame, which is every rectangular
+            /// caller and is what this did before regions existed.
+            override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+                guard let region else { return super.point(inside: point, with: event) }
+                return region(bounds).contains(point)
             }
 
             override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
