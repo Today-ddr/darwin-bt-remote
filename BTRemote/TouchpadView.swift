@@ -215,26 +215,14 @@
             /// so every step costs its own further movement instead of every update
             /// re-firing against the spread the pinch began at.
             private var pinchBaselineSeparation: CGFloat?
-            /// How much the spread has to move before the next zoom step is emitted.
-            /// The baseline is moved up to the spread a step was taken at, so this is
-            /// both the arming distance and the emission test, and it is what sets the
-            /// zoom rate. The latch that has to clear before any zoom is emitted at all
-            /// is a separate rule and is untouched.
+            /// How far a pinch has to move, net, before it counts as a zoom at all.
             ///
-            /// A step is a proportion of the spread rather than a fixed distance, so it
-            /// scales with the pinch the way zoom itself does: at the few centimetres two
-            /// fingers start a pinch from this is roughly 3 mm of travel, and it stays
-            /// proportionate as they spread. The count is therefore log-based — a pinch
-            /// that doubles the spread sends ln(2)/ln(1.08) ≈ 9 steps whether it is done
-            /// slowly or quickly — which is what keeps the zoom continuous without the
-            /// flood a fast pinch used to produce. The old rate had no dependence on
-            /// movement at all: once the pinch latched, every update that arrived sent a
-            /// step, so the total followed the delivery rate — a 60 Hz update stream put
-            /// out one every 17 ms for as long as the fingers stayed down, moving or not.
-            /// At 8% a deliberate pinch sends a few steps a second, and one that stops
-            /// sends nothing; smaller and the host is carpeted again, much larger and the
-            /// zoom arrives in visible jumps.
-            private static let zoomStepRatio: CGFloat = 0.08
+            /// This is a proportion of the starting spread rather than a fixed distance, so
+            /// it scales with the pinch: at the few centimetres two fingers begin from it is
+            /// a couple of millimetres, and it stays proportionate as they spread. A gesture
+            /// that ends inside this is treated as noise and sends nothing, which is what
+            /// keeps an incidental two-finger wobble from zooming anything.
+            private static let pinchStepRatio: CGFloat = 0.08
             private var pinchLatchStreak = 0
             /// Set once the latching run completes, and held for the rest of the
             /// gesture: the moment a pinch has proved itself it owns the touches.
@@ -432,36 +420,36 @@
                 }
             }
 
-            /// Zoom only, and never before the pinch has sustained its separation
-            /// change and taken the touches from the undecided case.
+            /// Zoom fires once, when the pinch ends, and never while it is running.
             ///
-            /// The emission rate is the step, not the update rate: a step is emitted when
-            /// the spread has moved `zoomStepRatio` from `pinchBaselineSeparation`, and
-            /// the baseline is then moved up to the spread it was emitted at, so the next
-            /// step needs its own further `zoomStepRatio` of movement. Updates that follow
-            /// without the fingers having moved read a delta inside the step and emit
-            /// nothing, so a pinch that stops stops sending keystrokes, and one held still
-            /// sends none at all. Rotation already worked this way — it resets its own
-            /// measure as it fires — which is why rotation never machine-gunned the host
-            /// while a pinch did.
+            /// A pinch squeezes a range, but the only thing a keyboard can express is the
+            /// `Cmd+=` / `Cmd+-` shortcut, and every one of those is a full press and
+            /// release. Emitting during the gesture turned one pinch into a burst — about
+            /// twelve keystrokes for a pinch that moved the fingers from 60pt to 150pt —
+            /// which the host reads as "that swipe zoomed ten times". Nothing is sent
+            /// until the fingers lift, so a gesture in progress cannot machine-gun the
+            /// host no matter how it moves, and the amount sent is one step decided by
+            /// where it ended up: spread means zoom in, pinched means zoom out, and a
+            /// gesture that never moved `pinchStepRatio` in net terms sends nothing at
+            /// all. A pinch is therefore one zoom, like the shortcut it stands in for.
             @objc func handlePinch(_ pinch: UIPinchGestureRecognizer) {
                 switch pinch.state {
                 case .began:
                     pinchBaselineSeparation = averageSeparation(pinch)
                     pinchLatchStreak = 0
                 case .changed:
-                    guard pinchIsSustained(pinch) else { return }
-                    guard let baseline = pinchBaselineSeparation, baseline > 1, let separation = averageSeparation(pinch) else { return }
-                    let delta = separation / baseline - 1
-                    if abs(delta) > Self.zoomStepRatio, twoFingerOwner() == .pinch {
-                        onZoom(delta)
-                        // Re-arm from the spread just reported. A step is a ratio of the
-                        // spread, so it holds its feel as the fingers spread, and the
-                        // movement that arms the next one is measured from where this one
-                        // was taken rather than from where the pinch began.
-                        pinchBaselineSeparation = separation
-                    }
+                    // sustain the latch only; the net movement is read when it ends
+                    _ = pinchIsSustained(pinch)
                 case .ended, .cancelled, .failed:
+                    if let baseline = pinchBaselineSeparation, baseline > 1,
+                       let separation = averageSeparation(pinch),
+                       pinchHasLatched, twoFingerOwner() == .pinch
+                    {
+                        let netDelta = separation / baseline - 1
+                        if abs(netDelta) > Self.pinchStepRatio {
+                            onZoom(netDelta)
+                        }
+                    }
                     endTwoFingerGesture()
                 default:
                     break

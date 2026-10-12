@@ -79,9 +79,14 @@ extension FullKeyboardView {
         ]
     }
 
+    /// The two shifts carry the same weight so the up arrow can sit directly over the down
+    /// arrow on the row below, and the arrows are wider than a letter key because they are
+    /// sized to row 5 rather than to row 4: that row shares its width between seven keys
+    /// where this one has thirteen, so the same weight is about half again as wide there.
+    /// Matching them any other way leaves the up arrow half a key off the column.
     var row4: [FullKeyCap] {
         [
-            FullKeyCap(.modifier(name: "Shift", symbol: "⇧", mod: .leftShift), weight: 2.1, L10n.Keyboard.shift, .modifier(.leftShift)),
+            FullKeyCap(.modifier(name: "Shift", symbol: "⇧", mod: .leftShift), weight: 1.69, L10n.Keyboard.shift, .modifier(.leftShift)),
             FullKeyCap(.letter("Z"), weight: 1.0, "Z", .key(.z)),
             FullKeyCap(.letter("X"), weight: 1.0, "X", .key(.x)),
             FullKeyCap(.letter("C"), weight: 1.0, "C", .key(.c)),
@@ -92,23 +97,28 @@ extension FullKeyboardView {
             FullKeyCap(.dual(top: "<", bottom: ","), weight: 1.0, ",", .key(.comma)),
             FullKeyCap(.dual(top: ">", bottom: "."), weight: 1.0, ".", .key(.period)),
             FullKeyCap(.dual(top: "?", bottom: "/"), weight: 1.0, "/", .key(.slash)),
-            FullKeyCap(.symbol("arrow.up", ""), weight: 1.0, L10n.Keyboard.up, .key(.upArrow)),
-            FullKeyCap(.modifier(name: "Shift", symbol: "⇧", mod: .rightShift), weight: 1.9, L10n.Keyboard.shift, .modifier(.rightShift))
+            FullKeyCap(.symbol("arrow.up", ""), weight: 1.62, L10n.Keyboard.up, .key(.upArrow)),
+            FullKeyCap(.modifier(name: "Shift", symbol: "⇧", mod: .rightShift), weight: 1.69, L10n.Keyboard.shift, .modifier(.rightShift))
         ]
     }
 
-    /// Ctrl / Cmd / Opt on the left, the three arrows on the right, and Space holding
-    /// everything in between. The right-hand Opt and Ctrl are gone and their width is
-    /// Space's: 1.3 + 1.2 + 1.2 + 7.8 + 1.16 + 1.16 + 1.18 = 15.0.
+    /// Ctrl / Cmd / Opt on the left, the arrows on the right, and Space holding everything
+    /// in between. The right-hand Opt and Ctrl are gone and their width is Space's.
+    ///
+    /// The four arrows are wider than the old three were, which is what puts the down
+    /// arrow — and so the up arrow above it on row 4 — where the up arrow used to be
+    /// missing from: the arrows are 1.62 against the keys' 1.0, so the group still ends
+    /// flush right at the same place.
+    /// 1.3 + 1.2 + 1.2 + 6.44 + 1.62 + 1.62 + 1.62 = 15.0.
     var row5: [FullKeyCap] {
         [
             FullKeyCap(.modifier(name: "Ctrl", symbol: "⌃", mod: .leftCtrl), weight: 1.3, L10n.Keyboard.ctrl, .modifier(.leftCtrl)),
             FullKeyCap(.modifier(name: "Cmd", symbol: "⌘", mod: .leftGUI), weight: 1.2, L10n.Keyboard.meta, .modifier(.leftGUI)),
             FullKeyCap(.modifier(name: "Opt", symbol: "⌥", mod: .leftAlt), weight: 1.2, L10n.Keyboard.alt, .modifier(.leftAlt)),
-            FullKeyCap(.text("Space"), weight: 7.8, L10n.Keyboard.space, .key(.space)),
-            FullKeyCap(.symbol("arrow.left", ""), weight: 1.16, L10n.Keyboard.left, .key(.leftArrow)),
-            FullKeyCap(.symbol("arrow.down", ""), weight: 1.16, L10n.Keyboard.down, .key(.downArrow)),
-            FullKeyCap(.symbol("arrow.right", ""), weight: 1.18, L10n.Keyboard.right, .key(.rightArrow))
+            FullKeyCap(.text("Space"), weight: 6.44, L10n.Keyboard.space, .key(.space)),
+            FullKeyCap(.symbol("arrow.left", ""), weight: 1.62, L10n.Keyboard.left, .key(.leftArrow)),
+            FullKeyCap(.symbol("arrow.down", ""), weight: 1.62, L10n.Keyboard.down, .key(.downArrow)),
+            FullKeyCap(.symbol("arrow.right", ""), weight: 1.62, L10n.Keyboard.right, .key(.rightArrow))
         ]
     }
 }
