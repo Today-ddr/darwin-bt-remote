@@ -1,6 +1,5 @@
 import SwiftUI
 
-let groupFill = Color.secondary.opacity(0.16)
 let cellGap: CGFloat = 6
 
 /// Shared metrics for the pill controls that sit above the content: the page switcher

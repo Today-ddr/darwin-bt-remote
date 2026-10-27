@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AppDock: View {
     @Binding var selection: AppTab
+    @Environment(\.appTheme) private var appTheme
 
     var body: some View {
         HStack(spacing: 4) {
@@ -32,7 +33,7 @@ struct AppDock: View {
         }
         .frame(maxWidth: 520)
         .padding(5)
-        .background(Capsule().fill(Color.secondary.opacity(0.12)))
+        .background(Capsule().fill(appTheme.dockFill))
         .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08)))
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 12)

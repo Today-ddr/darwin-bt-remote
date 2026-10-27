@@ -27,6 +27,7 @@ struct RemoteView: View {
     let goToSetup: () -> Void
 
     @Environment(\.hid) private var hid
+    @Environment(\.appTheme) private var appTheme
     @AppStorage(AppSettings.developerModeKey) private var developerMode = false
     @AppStorage(AppSettings.remoteModeKey) private var mode = RemoteMode.keyboard
 
@@ -56,6 +57,7 @@ struct RemoteView: View {
         .padding(.horizontal, ChipMetrics.pageHorizontalPadding)
         .padding(.top, ChipMetrics.pageTopPadding)
         .padding(.bottom, 8)
+        .background(appTheme.pageBackground)
     }
 
     /// Mirrors the keyboard page's switch button: the same corner radius, fill and
@@ -80,7 +82,7 @@ struct RemoteView: View {
             .padding(.horizontal, ChipMetrics.labelPadding)
             .background(
                 RoundedRectangle(cornerRadius: ChipMetrics.cornerRadius)
-                    .fill(groupFill)
+                    .fill(appTheme.controlFill)
             )
             .foregroundColor(.primary)
         }
@@ -118,7 +120,7 @@ struct RemoteView: View {
             consumerMember(.init(.playPause, "playpause.fill", L10n.Media.playPause))
             consumerMember(.init(.fastForward, "forward.fill", L10n.Media.fastForward))
         }
-        .background(RoundedRectangle(cornerRadius: 26).fill(groupFill))
+        .background(RoundedRectangle(cornerRadius: 26).fill(appTheme.controlFill))
     }
 
     private var grid: some View {
@@ -169,7 +171,7 @@ struct RemoteView: View {
             consumerMember(top)
             consumerMember(bottom)
         }
-        .background(Capsule().fill(groupFill))
+        .background(Capsule().fill(appTheme.controlFill))
     }
 
     private var bottomRow: some View {
@@ -193,7 +195,7 @@ struct RemoteView: View {
         HoldButton(
             onPress: { hid.sendConsumer(button.report) },
             onRelease: { hid.sendConsumer(.zero) },
-            background: { Circle().fill(groupFill) },
+            background: { Circle().fill(appTheme.controlFill) },
             label: { Image(systemName: button.icon).font(.title3) }
         )
         .accessibilityLabel(button.label)
@@ -213,7 +215,7 @@ struct RemoteView: View {
         HoldButton(
             onPress: { hid.sendKeyboard(KeyboardReport(keys: [key])) },
             onRelease: { hid.sendKeyboard(.zero) },
-            background: { Circle().fill(groupFill) },
+            background: { Circle().fill(appTheme.controlFill) },
             label: { Text(verbatim: "\(number)").font(.title3.weight(.medium)) }
         )
     }

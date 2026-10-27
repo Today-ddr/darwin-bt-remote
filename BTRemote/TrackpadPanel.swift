@@ -5,6 +5,7 @@ struct TrackpadPanel: View {
     /// Set to false to embed the touch surface alone, without the mouse buttons and scroll column.
     var showsControls = true
 
+    @Environment(\.appTheme) private var appTheme
     @AppStorage(AppSettings.touchpadSensitivityKey) private var touchpadSensitivity = AppSettings.defaultPointerSensitivity
     @AppStorage(AppSettings.scrollSensitivityKey) private var scrollSensitivity = AppSettings.defaultScrollSensitivity
     @AppStorage(AppSettings.invertScrollKey) private var invertScroll = false
@@ -43,7 +44,7 @@ struct TrackpadPanel: View {
 
     private var surface: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 12).fill(groupFill)
+            RoundedRectangle(cornerRadius: 12).fill(appTheme.controlFill)
             #if os(iOS)
                 TouchpadView(
                     moveSensitivity: touchpadSensitivity,
@@ -124,7 +125,7 @@ struct TrackpadPanel: View {
                     hid.sendMouse(MouseReport(buttons: activeButtons))
                 },
                 hapticSource: .trackpad,
-                background: { RoundedRectangle(cornerRadius: 12).fill(groupFill) },
+                background: { RoundedRectangle(cornerRadius: 12).fill(appTheme.controlFill) },
                 label: { Image(systemName: icon).font(.body) }
             )
             .accessibilityLabel(label)
@@ -198,7 +199,7 @@ struct TrackpadPanel: View {
                 hid.sendMouse(MouseReport(buttons: activeButtons))
             },
             hapticSource: .trackpad,
-            background: { RoundedRectangle(cornerRadius: 12).fill(groupFill) },
+            background: { RoundedRectangle(cornerRadius: 12).fill(appTheme.controlFill) },
             label: { Image(systemName: "computermouse").font(.body) }
         )
         .accessibilityLabel(L10n.Mouse.middleButton)
@@ -212,7 +213,7 @@ struct TrackpadPanel: View {
             },
             onRelease: {},
             hapticSource: .trackpad,
-            background: { RoundedRectangle(cornerRadius: 12).fill(groupFill) },
+            background: { RoundedRectangle(cornerRadius: 12).fill(appTheme.controlFill) },
             label: { Image(systemName: icon).font(.body) }
         )
         .accessibilityLabel(label)

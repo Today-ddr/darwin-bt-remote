@@ -4,6 +4,7 @@ private let keyHeight: CGFloat = 44
 
 struct ClassicKeyboardView: View {
     @Environment(\.hid) private var hid
+    @Environment(\.appTheme) private var appTheme
     @AppStorage(AppSettings.liveTypingKey) private var liveTyping = true
     @State private var text = ""
     @State private var sent = ""
@@ -39,6 +40,7 @@ struct ClassicKeyboardView: View {
             }
         }
         .padding()
+        .background(appTheme.pageBackground)
         .onChange(of: liveTyping) { _ in clear() }
         #if os(iOS)
             .ignoresSafeArea(.keyboard, edges: .bottom)
@@ -124,7 +126,9 @@ struct ClassicKeyboardView: View {
 
     private func keyCapButton(_ key: ClassicKeyCap) -> some View {
         let armed: Bool = {
-            if case let .modifier(mod) = key.action { return mods.contains(mod) }
+            if case let .modifier(mod) = key.action {
+                return mods.contains(mod)
+            }
             return false
         }()
         return Button {
@@ -136,7 +140,7 @@ struct ClassicKeyboardView: View {
         } label: {
             keyLabel(key.label)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(RoundedRectangle(cornerRadius: 6).fill(armed ? Color.accentColor : groupFill))
+                .background(RoundedRectangle(cornerRadius: 6).fill(armed ? Color.accentColor : appTheme.controlFill))
                 .foregroundColor(armed ? .white : .primary)
         }
         .buttonStyle(.plain)
@@ -200,7 +204,11 @@ struct ClassicKeyboardView: View {
     }
 
     private func toggle(_ mod: KeyboardModifiers) {
-        if mods.contains(mod) { mods.subtract(mod) } else { mods.insert(mod) }
+        if mods.contains(mod) {
+            mods.subtract(mod)
+        } else {
+            mods.insert(mod)
+        }
     }
 
     // live typing: diff the field against what was already sent
@@ -307,7 +315,9 @@ private struct ArrowPad: View {
 
     private func _direction(_ d: CGSize) -> Keycode? {
         guard hypot(d.width, d.height) >= 20 else { return nil }
-        if abs(d.width) > abs(d.height) { return d.width > 0 ? .rightArrow : .leftArrow }
+        if abs(d.width) > abs(d.height) {
+            return d.width > 0 ? .rightArrow : .leftArrow
+        }
         return d.height > 0 ? .downArrow : .upArrow
     }
 }

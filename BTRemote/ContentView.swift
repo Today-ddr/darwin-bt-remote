@@ -4,6 +4,7 @@ struct ContentView: View {
     @State private var tab = AppTab.setup
 
     @Environment(\.hid) private var hid
+    @Environment(\.appTheme) private var appTheme
     @StateObject private var directInput = DirectInputController()
     @Environment(\.openURL) private var openURL
     @AppStorage(AppSettings.hasSeenWelcomeKey) private var hasSeenWelcome = false
@@ -106,9 +107,11 @@ struct ContentView: View {
                         }
                     }
                     .animation(.easeInOut(duration: 0.18), value: showsDock)
+                    .background(appTheme.pageBackground.ignoresSafeArea())
             }
         #else
             tabs
+                .background(appTheme.pageBackground.ignoresSafeArea())
         #endif
     }
 

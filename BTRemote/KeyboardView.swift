@@ -30,6 +30,7 @@ struct KeyboardView: View {
     let goToSetup: () -> Void
 
     @Environment(\.hid) private var hid
+    @Environment(\.appTheme) private var appTheme
     @AppStorage(AppSettings.developerModeKey) private var developerMode = false
     @AppStorage(AppSettings.keyboardPageKey) private var selectedPage = KeyboardPage.fullKeyboard.rawValue
     @AppStorage(AppSettings.remoteModeKey) private var mode = RemoteMode.keyboard
@@ -41,6 +42,7 @@ struct KeyboardView: View {
                 contentView
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(appTheme.pageBackground)
         } else {
             NotConnectedView(icon: "keyboard", goToSetup: goToSetup)
         }
@@ -68,7 +70,7 @@ struct KeyboardView: View {
                     .frame(maxWidth: .infinity)
                     .background(
                         RoundedRectangle(cornerRadius: ChipMetrics.cornerRadius)
-                            .fill(selectedPage == page.rawValue ? Color.accentColor : groupFill)
+                            .fill(selectedPage == page.rawValue ? Color.accentColor : appTheme.controlFill)
                     )
                     .foregroundColor(selectedPage == page.rawValue ? .white : .primary)
                 }
@@ -85,7 +87,7 @@ struct KeyboardView: View {
                     .padding(.horizontal, ChipMetrics.iconOnlyPadding)
                     .background(
                         RoundedRectangle(cornerRadius: ChipMetrics.cornerRadius)
-                            .fill(groupFill)
+                            .fill(appTheme.controlFill)
                     )
                     .foregroundColor(.primary)
             }
@@ -122,7 +124,7 @@ struct KeyboardView: View {
             .frame(maxWidth: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: ChipMetrics.cornerRadius)
-                    .fill(groupFill)
+                    .fill(appTheme.controlFill)
             )
             .foregroundColor(.primary)
         }

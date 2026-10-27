@@ -5,12 +5,13 @@ import SwiftUI
 struct DPadView: View {
     let onPress: (ConsumerReport) -> Void
     let onRelease: () -> Void
+    @Environment(\.appTheme) private var appTheme
 
     var body: some View {
         GeometryReader { geo in
             let d = min(geo.size.width, geo.size.height)
             ZStack {
-                Circle().fill(groupFill)
+                Circle().fill(appTheme.controlFill)
 
                 wedge(.menuUp, 225, 315, L10n.Remote.up)
                 wedge(.menuDown, 45, 135, L10n.Remote.down)

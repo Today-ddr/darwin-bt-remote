@@ -392,15 +392,16 @@ private struct KeyPressBubbleOverlay: View {
 /// carries the cap's fill, with a soft shadow so it reads as raised.
 private struct KeyCapBubble: View {
     let bubble: KeyPressBubble
+    @Environment(\.appTheme) private var appTheme
 
     var body: some View {
         ZStack {
             // the cap's fill is translucent, so a bubble needs an opaque backing of its
             // own: otherwise the rows behind the lifted key would show straight through
             RoundedRectangle(cornerRadius: bubbleCornerRadius)
-                .fill(.background)
+                .fill(appTheme.opaquePageBackground)
             RoundedRectangle(cornerRadius: bubbleCornerRadius)
-                .fill(bubble.isArmed ? Color.accentColor : groupFill)
+                .fill(bubble.isArmed ? Color.accentColor : appTheme.controlFill)
             KeyCapLabel(
                 label: bubble.label,
                 isCompact: bubble.isCompact,
@@ -424,6 +425,7 @@ private struct FullKeyCapButton: View {
     let onPress: () -> Void
     let onRelease: () -> Void
 
+    @Environment(\.appTheme) private var appTheme
     /// Held only while a finger on this cap is down. `key` stays a value type so a key can
     /// never be stale across the `@State` snapshot, but the flag is dropped the moment the
     /// view carrying it goes away — see `releaseIfStranded`.
@@ -439,7 +441,7 @@ private struct FullKeyCapButton: View {
                 )
             #endif
             RoundedRectangle(cornerRadius: 6)
-                .fill(isArmed ? Color.accentColor : groupFill)
+                .fill(isArmed ? Color.accentColor : appTheme.controlFill)
                 .allowsHitTesting(false)
             KeyCapLabel(label: key.label, isCompact: isCompact, isArmed: isArmed, isShiftActive: isShiftActive)
                 .foregroundColor(isArmed ? .white : .primary)
