@@ -64,6 +64,13 @@ enum AppTheme: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+private struct AppThemeKey: EnvironmentKey {
+    static let defaultValue: AppTheme = .system
+}
+
 extension EnvironmentValues {
-    @Entry var appTheme: AppTheme = .system
+    var appTheme: AppTheme {
+        get { self[AppThemeKey.self] }
+        set { self[AppThemeKey.self] = newValue }
+    }
 }
