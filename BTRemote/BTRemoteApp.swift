@@ -55,12 +55,8 @@ struct BTRemoteApp: App {
         @State private var didSuspendPeripheral = false
     #endif
 
-    private var preferredColorScheme: ColorScheme? {
-        switch selectedTheme {
-        case "light": .light
-        case "dark": .dark
-        default: nil
-        }
+    private var theme: AppTheme {
+        AppTheme(storedValue: selectedTheme)
     }
 
     init() {
@@ -69,6 +65,7 @@ struct BTRemoteApp: App {
         #endif
         UserDefaults.standard.register(defaults: [
             AppSettings.useServiceChangedKey: true,
+            AppSettings.colorSchemeKey: AppTheme.system.rawValue,
             AppSettings.fullscreenKeyboardKey: true,
             // Haptics read raw UserDefaults, so the on-by-default state has to be
             // registered here — an @AppStorage default alone is invisible to them.
@@ -150,7 +147,8 @@ struct BTRemoteApp: App {
                     .environmentObject(central)
                     .environmentObject(deviceNames)
                     .environment(\.hid, hid)
-                    .preferredColorScheme(preferredColorScheme)
+                    .environment(\.appTheme, theme)
+                    .preferredColorScheme(theme.preferredColorScheme)
                     .onAppear {
                         central.start()
                         // with the preference off nothing is advertised, but the radio is
@@ -180,7 +178,8 @@ struct BTRemoteApp: App {
                     .environmentObject(deviceNames)
                     .environment(\.macTransport, currentMode)
                     .environment(\.hid, hid)
-                    .preferredColorScheme(preferredColorScheme)
+                    .environment(\.appTheme, theme)
+                    .preferredColorScheme(theme.preferredColorScheme)
                     .onAppear { _onAppear() }
                     .onChange(of: modeRaw) { _ in _modeChanged() }
                 // No scene-phase rule here, on purpose. `scenePhase` on macOS is the

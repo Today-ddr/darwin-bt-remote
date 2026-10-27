@@ -4,6 +4,7 @@ enum AppSettings {
     static let touchpadSensitivityKey = "BTRemote.touchpadSensitivity"
     static let scrollSensitivityKey = "BTRemote.scrollSensitivity"
     static let autoAdvertiseKey = "BTRemote.autoAdvertise"
+    /// Raw value of `AppTheme`; unknown or absent values read as `.system`.
     static let colorSchemeKey = "BTRemote.colorScheme"
     static let developerModeKey = "BTRemote.developerMode"
     static let useServiceChangedKey = "BTRemote.useServiceChanged"
