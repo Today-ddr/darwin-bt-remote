@@ -1,12 +1,15 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var tab = Tab.setup
+    @State private var tab = AppTab.setup
 
     @Environment(\.hid) private var hid
     @StateObject private var directInput = DirectInputController()
     @Environment(\.openURL) private var openURL
     @AppStorage(AppSettings.hasSeenWelcomeKey) private var hasSeenWelcome = false
+    @AppStorage(AppSettings.fullscreenKeyboardKey) private var fullscreenKeyboard = true
+    @AppStorage(AppSettings.remoteModeKey) private var remoteMode = RemoteMode.keyboard
+    @AppStorage(AppSettings.keyboardPageKey) private var keyboardPage = KeyboardPage.fullKeyboard.rawValue
     @State private var showWelcome = false
     @State private var showGuide = false
     #if os(macOS)
@@ -14,30 +17,18 @@ struct ContentView: View {
         @State private var showConnectPrompt = false
     #endif
 
-    private enum Tab {
-        case setup, remote, settings
-    }
-
     var body: some View {
-        TabView(selection: $tab) {
-            SetupView()
-                .tabItem { Label(L10n.Tab.setup, systemImage: "gearshape") }
-                .tag(Tab.setup)
-            RemoteTabView(goToSetup: { tab = .setup })
-                .tabItem { Label(L10n.Tab.remote, systemImage: "keyboard") }
-                .tag(Tab.remote)
-            SettingsView()
-                .tabItem { Label(L10n.Tab.settings, systemImage: "slider.horizontal.3") }
-                .tag(Tab.settings)
-        }
-        .environmentObject(directInput)
+        rootTabs
+            .environmentObject(directInput)
         #if os(iOS)
             .background(PointerLockHost(locked: directInput.isCapturing))
         #endif
             .onChange(of: hid.isConnected) { connected in
                 guard connected else { return }
                 #if os(macOS)
-                    if !directInput.isCapturing { showConnectPrompt = true }
+                    if !directInput.isCapturing {
+                        showConnectPrompt = true
+                    }
                 #else
                     tab = .remote
                 #endif
@@ -78,12 +69,57 @@ struct ContentView: View {
         #endif
     }
 
+    private var tabs: some View {
+        TabView(selection: $tab) {
+            SetupView()
+                .tabItem { Label(L10n.Tab.setup, systemImage: "gearshape") }
+                .tag(AppTab.setup)
+            RemoteTabView(goToSetup: { tab = .setup })
+                .tabItem { Label(L10n.Tab.remote, systemImage: "keyboard") }
+                .tag(AppTab.remote)
+            SettingsView()
+                .tabItem { Label(L10n.Tab.settings, systemImage: "slider.horizontal.3") }
+                .tag(AppTab.settings)
+        }
+        #if os(iOS)
+        .nativeTabBarHidden()
+        #endif
+    }
+
+    @ViewBuilder
+    private var rootTabs: some View {
+        #if os(iOS)
+            GeometryReader { proxy in
+                let isLandscape = proxy.size.width > proxy.size.height
+                let showsDock = DockVisibilityPolicy.showsDock(
+                    hidesDockInLandscape: fullscreenKeyboard,
+                    isLandscape: isLandscape,
+                    selectedTab: tab,
+                    remoteMode: remoteMode,
+                    keyboardPageRawValue: keyboardPage
+                )
+                tabs
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        if showsDock {
+                            AppDock(selection: $tab)
+                        }
+                    }
+                    .animation(.easeInOut(duration: 0.18), value: showsDock)
+            }
+        #else
+            tabs
+        #endif
+    }
+
     private func _onAppear() {
         if !hasSeenWelcome {
             showWelcome = true
         }
         #if os(macOS)
-            if hasSeenWelcome, !AccessibilityPermission.isTrusted { showAccessibilityPrompt = true }
+            if hasSeenWelcome, !AccessibilityPermission.isTrusted {
+                showAccessibilityPrompt = true
+            }
         #endif
     }
 

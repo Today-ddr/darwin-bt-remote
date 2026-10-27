@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(\.hid) private var hid
     @State private var showReset = false
     @AppStorage(AppSettings.colorSchemeKey) private var selectedTheme = "system"
+    @AppStorage(AppSettings.fullscreenKeyboardKey) private var fullscreenKeyboard = true
     @AppStorage(AppSettings.touchpadSensitivityKey) private var touchpadSensitivity = AppSettings.defaultPointerSensitivity
     @AppStorage(AppSettings.scrollSensitivityKey) private var scrollSensitivity = AppSettings.defaultScrollSensitivity
     @AppStorage(AppSettings.developerModeKey) private var developerMode = false
@@ -47,6 +48,15 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
             }
+            #if os(iOS)
+                Section {
+                    Toggle(L10n.Settings.fullScreenKeyboard, isOn: $fullscreenKeyboard)
+                } header: {
+                    Text(L10n.Settings.keyboard)
+                } footer: {
+                    Text(L10n.Settings.fullScreenKeyboardHint)
+                }
+            #endif
             Section(header: Text(L10n.Settings.trackpad)) {
                 sensitivityRow(L10n.Settings.trackingSpeed, value: $touchpadSensitivity, range: AppSettings.pointerSensitivityRange)
                 sensitivityRow(L10n.Settings.scrollSpeed, value: $scrollSensitivity, range: AppSettings.scrollSensitivityRange)
@@ -88,7 +98,11 @@ struct SettingsView: View {
             #endif
             Section(footer: Text(L10n.Settings.forceServiceChangedHint)) {
                 Toggle(L10n.Settings.forceServiceChanged, isOn: $forceServiceChanged)
-                    .onChange(of: forceServiceChanged) { if $0 { lowEnergy.scheduleServiceChanged() } }
+                    .onChange(of: forceServiceChanged) {
+                        if $0 {
+                            lowEnergy.scheduleServiceChanged()
+                        }
+                    }
             }
             Section(header: Text(L10n.Settings.advanced)) {
                 // The classic keyboard's live-typing mode. It fits none of the other
@@ -103,7 +117,9 @@ struct SettingsView: View {
                     Label(L10n.Settings.sourceCode, systemImage: "chevron.left.forwardslash.chevron.right")
                 }
             }
-            if developerMode, hid.isActive { batterySection }
+            if developerMode, hid.isActive {
+                batterySection
+            }
             resetSection
         }
         .confirmationDialog(L10n.Settings.resetConfirm, isPresented: $showReset, titleVisibility: .visible) {

@@ -1,5 +1,9 @@
 import SwiftUI
 
+#if os(iOS)
+    import UIKit
+#endif
+
 #if os(macOS)
     enum TransportMode: String, CaseIterable, Codable {
         case classic
@@ -53,15 +57,19 @@ struct BTRemoteApp: App {
 
     private var preferredColorScheme: ColorScheme? {
         switch selectedTheme {
-        case "light": return .light
-        case "dark": return .dark
-        default: return nil
+        case "light": .light
+        case "dark": .dark
+        default: nil
         }
     }
 
     init() {
+        #if os(iOS)
+            UITabBar.appearance().isHidden = true
+        #endif
         UserDefaults.standard.register(defaults: [
             AppSettings.useServiceChangedKey: true,
+            AppSettings.fullscreenKeyboardKey: true,
             // Haptics read raw UserDefaults, so the on-by-default state has to be
             // registered here — an @AppStorage default alone is invisible to them.
             AppSettings.hapticsEnabledKey: true,

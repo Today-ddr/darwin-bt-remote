@@ -5,7 +5,9 @@ enum KeyboardPage: Int, CaseIterable, Identifiable {
     case trackpad = 1
     case classic = 2
 
-    var id: Int { rawValue }
+    var id: Int {
+        rawValue
+    }
 
     var title: LocalizedStringKey {
         switch self {
@@ -29,7 +31,7 @@ struct KeyboardView: View {
 
     @Environment(\.hid) private var hid
     @AppStorage(AppSettings.developerModeKey) private var developerMode = false
-    @AppStorage("BTRemote.keyboardPage") private var selectedPage = 0
+    @AppStorage(AppSettings.keyboardPageKey) private var selectedPage = KeyboardPage.fullKeyboard.rawValue
     @AppStorage(AppSettings.remoteModeKey) private var mode = RemoteMode.keyboard
 
     var body: some View {

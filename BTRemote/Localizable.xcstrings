@@ -4488,6 +4488,57 @@
           }
         }
       }
+    },
+    "settings.keyboard": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keyboard"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "键盘"
+          }
+        }
+      }
+    },
+    "settings.fullscreen_keyboard": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Landscape Full-Screen Keyboard"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "横屏键盘全屏"
+          }
+        }
+      }
+    },
+    "settings.fullscreen_keyboard_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide the dock while the Combo page is in landscape. Rotate to portrait to reach Setup and Settings."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "横屏显示“键鼠”页时隐藏底部 Dock；转回竖屏即可进入连接和设置。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
