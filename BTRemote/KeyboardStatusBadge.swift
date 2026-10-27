@@ -57,13 +57,38 @@ struct KeyboardStatusSnapshot: Equatable {
     }
 }
 
+enum KeyboardStatusBadgeContent: Equatable {
+    case connection
+    case modifiers
+}
+
 struct KeyboardStatusBadge: View {
     let status: KeyboardStatusSnapshot
+    var content: KeyboardStatusBadgeContent = .connection
 
     @Environment(\.appTheme) private var appTheme
 
     var body: some View {
         HStack(spacing: 3) {
+            badgeContent
+        }
+        .font(.system(size: 9, weight: .semibold, design: .rounded))
+        .foregroundStyle(.primary)
+        .lineLimit(1)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 4)
+        .frame(width: KeyboardEarLayoutPolicy.badgeWidth)
+        .background(Capsule().fill(appTheme.controlFill))
+        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(Text(verbatim: status.accessibilityValue))
+    }
+
+    @ViewBuilder
+    private var badgeContent: some View {
+        switch content {
+        case .connection:
             stateMark
 
             if let count = status.connectedCountText {
@@ -72,21 +97,21 @@ struct KeyboardStatusBadge: View {
                     .minimumScaleFactor(0.7)
             }
 
+        case .modifiers:
             if let glyph = status.modifierGlyph {
                 Text(verbatim: glyph)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
             }
         }
-        .font(.system(size: 9, weight: .semibold, design: .rounded))
-        .foregroundStyle(.primary)
-        .lineLimit(1)
-        .padding(.horizontal, 5)
-        .padding(.vertical, 4)
-        .frame(width: 38)
-        .background(Capsule().fill(appTheme.controlFill))
-        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(status.kind.title)
-        .accessibilityValue(Text(verbatim: status.accessibilityValue))
+    }
+
+    private var accessibilityLabel: Text {
+        switch content {
+        case .connection:
+            Text(status.kind.title)
+        case .modifiers:
+            Text(verbatim: status.modifierGlyph ?? "")
+        }
     }
 
     @ViewBuilder
