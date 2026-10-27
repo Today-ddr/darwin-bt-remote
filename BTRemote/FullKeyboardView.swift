@@ -19,6 +19,9 @@ private let bubbleGap: CGFloat = 4
 private let bubbleExtraHeight: CGFloat = 12
 private let bubbleCornerRadius: CGFloat = 8
 private let bubbleLabelScale: CGFloat = 1.3
+/// The status badge lives in the landscape ear instead of taking a key's width.
+private let statusBadgeWidth: CGFloat = 38
+private let statusBadgeMinimumLeadingInset: CGFloat = 42
 
 struct FullKeyboardView: View {
     @Environment(\.hid) private var hid
@@ -65,6 +68,18 @@ struct FullKeyboardView: View {
             // edges are ignored: the vertical insets stay, so the top row still clears the
             // status bar and the bottom row still clears the home indicator.
             .ignoresSafeArea(.container, edges: .horizontal)
+            .overlay(alignment: .topLeading) {
+                #if os(iOS)
+                    if outer.size.width > outer.size.height,
+                       insets.leading >= statusBadgeMinimumLeadingInset
+                    {
+                        KeyboardStatusBadge(status: statusSnapshot)
+                            .padding(.leading, max(3, (insets.leading - statusBadgeWidth) / 2))
+                            .padding(.top, 4)
+                            .allowsHitTesting(false)
+                    }
+                #endif
+            }
         }
         // last line of defence: nothing is touching the surface, so nothing may stay held.
         // This fires now that `KeyTouchCount` publishes its value; it can arrive at the same
@@ -85,6 +100,17 @@ struct FullKeyboardView: View {
     }
 
     // MARK: - Keyboard
+
+    private var statusSnapshot: KeyboardStatusSnapshot {
+        KeyboardStatusSnapshot(
+            isActive: hid.isActive,
+            isConnected: hid.isConnected,
+            connectedHostCount: hid.connectedHostCount,
+            errorMessage: hid.activeError,
+            isCapsLockOn: isCapsLockOn,
+            isShiftActive: isShiftActive
+        )
+    }
 
     /// One six-row layout in both orientations, with a side trackpad when landscape
     /// leaves enough width for both surfaces to remain usable.
