@@ -79,14 +79,13 @@ extension FullKeyboardView {
         ]
     }
 
-    /// The two shifts carry the same weight so the up arrow can sit directly over the down
-    /// arrow on the row below, and the arrows are wider than a letter key because they are
-    /// sized to row 5 rather than to row 4: that row shares its width between seven keys
-    /// where this one has thirteen, so the same weight is about half again as wide there.
-    /// Matching them any other way leaves the up arrow half a key off the column.
+    /// The left shift absorbs the extra width the old equal-shift layout left
+    /// between the up and down arrows: 1.76 + ten 1.0 keys + 1.62 + 1.62 = 15.0.
+    /// Both the up arrow and the down arrow below it therefore start at 11.76
+    /// units, and share the same 1.62-unit width.
     var row4: [FullKeyCap] {
         [
-            FullKeyCap(.modifier(name: "Shift", symbol: "⇧", mod: .leftShift), weight: 1.69, L10n.Keyboard.shift, .modifier(.leftShift)),
+            FullKeyCap(.modifier(name: "Shift", symbol: "⇧", mod: .leftShift), weight: 1.76, L10n.Keyboard.shift, .modifier(.leftShift)),
             FullKeyCap(.letter("Z"), weight: 1.0, "Z", .key(.z)),
             FullKeyCap(.letter("X"), weight: 1.0, "X", .key(.x)),
             FullKeyCap(.letter("C"), weight: 1.0, "C", .key(.c)),
@@ -98,7 +97,7 @@ extension FullKeyboardView {
             FullKeyCap(.dual(top: ">", bottom: "."), weight: 1.0, ".", .key(.period)),
             FullKeyCap(.dual(top: "?", bottom: "/"), weight: 1.0, "/", .key(.slash)),
             FullKeyCap(.symbol("arrow.up", ""), weight: 1.62, L10n.Keyboard.up, .key(.upArrow)),
-            FullKeyCap(.modifier(name: "Shift", symbol: "⇧", mod: .rightShift), weight: 1.69, L10n.Keyboard.shift, .modifier(.rightShift))
+            FullKeyCap(.modifier(name: "Shift", symbol: "⇧", mod: .rightShift), weight: 1.62, L10n.Keyboard.shift, .modifier(.rightShift))
         ]
     }
 
@@ -151,4 +150,3 @@ struct FullKeyCap {
         self.action = action
     }
 }
-

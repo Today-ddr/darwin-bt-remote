@@ -113,14 +113,7 @@ struct FullKeyboardView: View {
         )
 
         return keyboardLayout(
-            rows: [
-                (row0, 15.0),
-                (row1, 15.0),
-                (row2, 15.0),
-                (row3, 15.0),
-                (row4, 15.0),
-                (row5, 15.0)
-            ],
+            rows: [row0, row1, row2, row3, row4, row5],
             size: size,
             gap: gap,
             height: keyHeight,
@@ -130,7 +123,7 @@ struct FullKeyboardView: View {
 
     /// Keys pinned to the top; a trackpad fills the leftover below when there is room for one.
     private func keyboardLayout(
-        rows: [([FullKeyCap], CGFloat)],
+        rows: [[FullKeyCap]],
         size: CGSize,
         gap: CGFloat,
         height: CGFloat,
@@ -141,14 +134,13 @@ struct FullKeyboardView: View {
 
         return KeyCapTouchSurface(touches: surfaceTouches, onAllTouchesEnded: releaseAllKeys) {
             VStack(spacing: gap) {
-                ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
+                ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, keys in
                     keyRow(
-                        row.0,
+                        keys,
                         row: rowIndex,
                         width: size.width,
                         gap: gap,
                         height: height,
-                        totalWeight: row.1,
                         isCompact: isCompact
                     )
                 }
@@ -168,33 +160,49 @@ struct FullKeyboardView: View {
         }
     }
 
+    private struct KeyPlacement {
+        let column: Int
+        let key: FullKeyCap
+        let frame: CGRect
+    }
+
     private func keyRow(
         _ keys: [FullKeyCap],
         row rowIndex: Int,
         width: CGFloat,
         gap: CGFloat,
         height: CGFloat,
-        totalWeight: CGFloat,
         isCompact: Bool
     ) -> some View {
-        let gaps = gap * CGFloat(max(keys.count - 1, 0))
-        let unit = max(0, (width - gaps) / totalWeight)
+        let metrics = KeyboardGridMetrics(width: width, gap: gap)
+        var nextStartUnits: CGFloat = 0
+        let placements = keys.enumerated().map { column, key -> KeyPlacement in
+            let frame = metrics.frame(
+                startUnits: nextStartUnits,
+                widthUnits: key.weight,
+                height: height
+            )
+            nextStartUnits += key.weight
+            return KeyPlacement(column: column, key: key, frame: frame)
+        }
 
-        return HStack(spacing: gap) {
-            ForEach(Array(keys.enumerated()), id: \.offset) { column, key in
+        return ZStack(alignment: .topLeading) {
+            ForEach(placements, id: \.column) { placement in
                 FullKeyCapButton(
-                    id: KeyCapID(row: rowIndex, column: column),
-                    key: key,
+                    id: KeyCapID(row: rowIndex, column: placement.column),
+                    key: placement.key,
                     isCompact: isCompact,
-                    isArmed: isKeyArmed(key),
+                    isArmed: isKeyArmed(placement.key),
                     isShiftActive: isShiftActive,
                     surfaceTouches: surfaceTouches,
-                    onPress: { handlePress(key) },
-                    onRelease: { handleRelease(key) }
+                    onPress: { handlePress(placement.key) },
+                    onRelease: { handleRelease(placement.key) }
                 )
-                .frame(width: max(0, unit * key.weight), height: height)
+                .frame(width: placement.frame.width, height: placement.frame.height)
+                .offset(x: placement.frame.minX)
             }
         }
+        .frame(width: width, height: height, alignment: .topLeading)
     }
 
     private var isShiftActive: Bool {
@@ -204,11 +212,11 @@ struct FullKeyboardView: View {
     private func isKeyArmed(_ key: FullKeyCap) -> Bool {
         switch key.action {
         case let .modifier(mod):
-            return mods.contains(mod)
+            mods.contains(mod)
         case .capsLock:
-            return isCapsLockOn
+            isCapsLockOn
         case .key:
-            return false
+            false
         }
     }
 
@@ -274,9 +282,9 @@ struct FullKeyboardView: View {
         switch key {
         case .a, .b, .c, .d, .e, .f, .g, .h, .i, .j, .k, .l, .m,
              .n, .o, .p, .q, .r, .s, .t, .u, .v, .w, .x, .y, .z:
-            return true
+            true
         default:
-            return false
+            false
         }
     }
 }

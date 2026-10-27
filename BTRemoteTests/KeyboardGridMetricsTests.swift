@@ -1,6 +1,6 @@
+@testable import BTRemote
 import CoreGraphics
 import XCTest
-@testable import BTRemote
 
 final class KeyboardGridMetricsTests: XCTestCase {
     func testOneUnitKeysUseTheSamePitchInEveryRow() {
