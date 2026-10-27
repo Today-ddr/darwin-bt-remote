@@ -5,7 +5,7 @@ struct SettingsView: View {
     @EnvironmentObject private var names: DeviceNameStore
     @Environment(\.hid) private var hid
     @State private var showReset = false
-    @AppStorage(AppSettings.colorSchemeKey) private var selectedTheme = "system"
+    @AppStorage(AppSettings.colorSchemeKey) private var selectedThemeRaw = AppTheme.system.rawValue
     @AppStorage(AppSettings.fullscreenKeyboardKey) private var fullscreenKeyboard = true
     @AppStorage(AppSettings.touchpadSensitivityKey) private var touchpadSensitivity = AppSettings.defaultPointerSensitivity
     @AppStorage(AppSettings.scrollSensitivityKey) private var scrollSensitivity = AppSettings.defaultScrollSensitivity
@@ -22,6 +22,10 @@ struct SettingsView: View {
         /// off by default: advertising is what wakes paired hosts, so it waits to be asked for
         @AppStorage(AppSettings.autoAdvertiseKey) private var autoAdvertise = false
     #endif
+
+    private var selectedTheme: AppTheme {
+        AppTheme(storedValue: selectedThemeRaw)
+    }
 
     var body: some View {
         #if os(macOS)
@@ -40,13 +44,19 @@ struct SettingsView: View {
 
     private var form: some View {
         Form {
-            Section(header: Text(L10n.Settings.appearance)) {
-                Picker(L10n.Settings.appearance, selection: $selectedTheme) {
-                    Text(L10n.Settings.themeSystem).tag("system")
-                    Text(L10n.Settings.themeLight).tag("light")
-                    Text(L10n.Settings.themeDark).tag("dark")
+            Section {
+                Picker(L10n.Settings.appearance, selection: $selectedThemeRaw) {
+                    ForEach(AppTheme.allCases) { theme in
+                        Text(theme.title).tag(theme.rawValue)
+                    }
                 }
                 .pickerStyle(.segmented)
+            } header: {
+                Text(L10n.Settings.appearance)
+            } footer: {
+                if selectedTheme == .oled {
+                    Text(L10n.Settings.oledHint)
+                }
             }
             #if os(iOS)
                 Section {

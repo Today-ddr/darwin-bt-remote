@@ -4539,6 +4539,40 @@
           }
         }
       }
+    },
+    "settings.theme.oled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OLED"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OLED 黑"
+          }
+        }
+      }
+    },
+    "settings.theme.oled_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uses true-black surfaces to reduce power on OLED displays."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用纯黑背景和低亮控件，减少 OLED 屏幕耗电。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

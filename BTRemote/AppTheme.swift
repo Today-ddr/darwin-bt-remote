@@ -19,6 +19,15 @@ enum AppTheme: String, CaseIterable, Identifiable, Sendable {
         self = AppTheme(rawValue: storedValue) ?? .system
     }
 
+    var title: LocalizedStringKey {
+        switch self {
+        case .system: L10n.Settings.themeSystem
+        case .light: L10n.Settings.themeLight
+        case .dark: L10n.Settings.themeDark
+        case .oled: L10n.Settings.themeOLED
+        }
+    }
+
     var preferredColorScheme: ColorScheme? {
         switch self {
         case .system: nil

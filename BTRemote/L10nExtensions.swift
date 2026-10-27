@@ -178,6 +178,14 @@ extension L10n {
             "settings.theme.dark"
         }
 
+        static var themeOLED: LocalizedStringKey {
+            "settings.theme.oled"
+        }
+
+        static var oledHint: LocalizedStringKey {
+            "settings.theme.oled_hint"
+        }
+
         static var keyboard: LocalizedStringKey {
             "settings.keyboard"
         }
