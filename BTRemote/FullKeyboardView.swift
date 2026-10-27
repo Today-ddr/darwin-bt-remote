@@ -47,8 +47,7 @@ struct FullKeyboardView: View {
         GeometryReader { outer in
             let insets = outer.safeAreaInsets
             GeometryReader { geo in
-                let isLandscape = geo.size.width > geo.size.height
-                keyboard(size: geo.size, isLandscape: isLandscape)
+                keyboard(size: geo.size)
             }
             .padding(.horizontal, keyHorizontalMargin)
             .padding(.vertical, 4)
@@ -87,15 +86,45 @@ struct FullKeyboardView: View {
 
     // MARK: - Keyboard
 
-    /// One six-row layout for both orientations, so a key sits in the same place
-    /// whichever way the device is held.
+    /// One six-row layout in both orientations, with a side trackpad when landscape
+    /// leaves enough width for both surfaces to remain usable.
     ///
     /// The rows are narrower in portrait than in landscape, so the keys are
     /// necessarily smaller there; they scale to fill the width exactly rather than
     /// scrolling. A scrolling surface was rejected on purpose: a scroll view delays
     /// touch delivery and its pan recogniser can cancel a touch that started on a
     /// key, which is the same class of interruption that used to leave keys latched.
-    private func keyboard(size: CGSize, isLandscape: Bool) -> some View {
+    @ViewBuilder
+    private func keyboard(size: CGSize) -> some View {
+        switch FullKeyboardLayoutPolicy.presentation(in: size) {
+        case .singleColumn:
+            keyboardSurface(
+                size: size,
+                isLandscape: size.width > size.height,
+                fillsHeight: false
+            )
+        case let .split(sidePanelWidth):
+            HStack(spacing: FullKeyboardLayoutPolicy.columnSpacing) {
+                keyboardSurface(
+                    size: CGSize(
+                        width: size.width - sidePanelWidth - FullKeyboardLayoutPolicy.columnSpacing,
+                        height: size.height
+                    ),
+                    isLandscape: true,
+                    fillsHeight: true
+                )
+                TrackpadPanel(hid: hid)
+                    .frame(width: sidePanelWidth, height: size.height)
+            }
+            .frame(width: size.width, height: size.height)
+        }
+    }
+
+    private func keyboardSurface(
+        size: CGSize,
+        isLandscape: Bool,
+        fillsHeight: Bool
+    ) -> some View {
         let gap: CGFloat = isLandscape ? 5 : 4
         let totalRows: CGFloat = 6
         let availableHeight = size.height - (totalRows - 1) * gap
@@ -105,12 +134,16 @@ struct FullKeyboardView: View {
         // the home indicator; the keys take it back instead. This is where the height
         // freed by the removed title bar ends up on a device with no room for a trackpad.
         let leftoverForTrackpad = availableHeight - totalRows * maximumKeyHeight
-        let keyHeight = max(
-            minimumKeyHeight,
-            idealKeyHeight > maximumKeyHeight && leftoverForTrackpad < trackpadMinimumHeight
-                ? idealKeyHeight
-                : min(maximumKeyHeight, idealKeyHeight)
-        )
+        let keyHeight: CGFloat = if fillsHeight {
+            max(minimumKeyHeight, idealKeyHeight)
+        } else {
+            max(
+                minimumKeyHeight,
+                idealKeyHeight > maximumKeyHeight && leftoverForTrackpad < trackpadMinimumHeight
+                    ? idealKeyHeight
+                    : min(maximumKeyHeight, idealKeyHeight)
+            )
+        }
 
         return keyboardLayout(
             rows: [row0, row1, row2, row3, row4, row5],
