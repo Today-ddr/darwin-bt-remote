@@ -25,6 +25,38 @@ final class FullKeyboardRowsTests: XCTestCase {
         XCTAssertEqual(up.key.weight, down.key.weight, accuracy: 0.001)
     }
 
+    func testMainRowsUseStandardModifierWidths() throws {
+        let sut = FullKeyboardView()
+        let enter = try XCTUnwrap(sut.row3.last)
+        let leftShift = try XCTUnwrap(sut.row4.first)
+        let rightShift = try XCTUnwrap(sut.row4.last)
+
+        XCTAssertEqual(sut.row3[0].weight, 1.75, accuracy: 0.001)
+        XCTAssertEqual(enter.weight, 2.25, accuracy: 0.001)
+        XCTAssertEqual(leftShift.weight, 2.25, accuracy: 0.001)
+        XCTAssertEqual(rightShift.weight, 1.75, accuracy: 0.001)
+    }
+
+    func testBottomRowUsesAppleModifierOrder() {
+        let sut = FullKeyboardView()
+        let modifiers = sut.row5.compactMap { key -> KeyboardModifiers? in
+            guard case let .modifier(mod) = key.action else { return nil }
+            return mod
+        }
+
+        XCTAssertEqual(
+            modifiers,
+            [.leftCtrl, .leftAlt, .leftGUI, .rightGUI, .rightAlt]
+        )
+    }
+
+    func testBottomRowUsesTheFullTrailingEdge() {
+        let sut = FullKeyboardView()
+        let trailing = sut.row5.suffix(3)
+
+        XCTAssertEqual(trailing.map(\.weight), [1.0, 1.0, 1.75])
+    }
+
     private func key(
         _ code: Keycode,
         in row: [FullKeyCap]

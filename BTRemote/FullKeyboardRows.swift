@@ -61,9 +61,10 @@ extension FullKeyboardView {
         ]
     }
 
+    /// Standard ANSI modifier widths: Caps Lock 1.75u and Return 2.25u.
     var row3: [FullKeyCap] {
         [
-            FullKeyCap(.capsLock, weight: 1.8, L10n.Keyboard.capsLock, .capsLock),
+            FullKeyCap(.capsLock, weight: 1.75, L10n.Keyboard.capsLock, .capsLock),
             FullKeyCap(.letter("A"), weight: 1.0, "A", .key(.a)),
             FullKeyCap(.letter("S"), weight: 1.0, "S", .key(.s)),
             FullKeyCap(.letter("D"), weight: 1.0, "D", .key(.d)),
@@ -75,17 +76,16 @@ extension FullKeyboardView {
             FullKeyCap(.letter("L"), weight: 1.0, "L", .key(.l)),
             FullKeyCap(.dual(top: ":", bottom: ";"), weight: 1.0, ";", .key(.semicolon)),
             FullKeyCap(.dual(top: "\"", bottom: "'"), weight: 1.0, "'", .key(.quote)),
-            FullKeyCap(.symbol("return", "Enter"), weight: 2.2, L10n.Keyboard.enter, .key(.return))
+            FullKeyCap(.symbol("return", "Enter"), weight: 2.25, L10n.Keyboard.enter, .key(.return))
         ]
     }
 
-    /// The left shift absorbs the extra width the old equal-shift layout left
-    /// between the up and down arrows: 1.76 + ten 1.0 keys + 1.62 + 1.62 = 15.0.
-    /// Both the up arrow and the down arrow below it therefore start at 11.76
-    /// units, and share the same 1.62-unit width.
+    /// ANSI left Shift is 2.25u. The Up arrow takes one unit beside a 1.75u
+    /// right Shift, which is the compact-keyboard compromise that keeps it
+    /// exactly above Down: 2.25 + ten 1u keys + 1u + 1.75 = 15u.
     var row4: [FullKeyCap] {
         [
-            FullKeyCap(.modifier(name: "Shift", symbol: "⇧", mod: .leftShift), weight: 1.76, L10n.Keyboard.shift, .modifier(.leftShift)),
+            FullKeyCap(.modifier(name: "Shift", symbol: "⇧", mod: .leftShift), weight: 2.25, L10n.Keyboard.shift, .modifier(.leftShift)),
             FullKeyCap(.letter("Z"), weight: 1.0, "Z", .key(.z)),
             FullKeyCap(.letter("X"), weight: 1.0, "X", .key(.x)),
             FullKeyCap(.letter("C"), weight: 1.0, "C", .key(.c)),
@@ -96,28 +96,28 @@ extension FullKeyboardView {
             FullKeyCap(.dual(top: "<", bottom: ","), weight: 1.0, ",", .key(.comma)),
             FullKeyCap(.dual(top: ">", bottom: "."), weight: 1.0, ".", .key(.period)),
             FullKeyCap(.dual(top: "?", bottom: "/"), weight: 1.0, "/", .key(.slash)),
-            FullKeyCap(.symbol("arrow.up", ""), weight: 1.62, L10n.Keyboard.up, .key(.upArrow)),
-            FullKeyCap(.modifier(name: "Shift", symbol: "⇧", mod: .rightShift), weight: 1.62, L10n.Keyboard.shift, .modifier(.rightShift))
+            FullKeyCap(.symbol("arrow.up", ""), weight: 1.0, L10n.Keyboard.up, .key(.upArrow)),
+            FullKeyCap(.modifier(name: "Shift", symbol: "⇧", mod: .rightShift), weight: 1.75, L10n.Keyboard.shift, .modifier(.rightShift))
         ]
     }
 
-    /// Ctrl / Cmd / Opt on the left, the arrows on the right, and Space holding everything
-    /// in between. The right-hand Opt and Ctrl are gone and their width is Space's.
+    /// Apple's bottom-row order on the left is Control, Option, Command. The
+    /// right side repeats Command and Option before the arrows, so the whole
+    /// row reaches the trailing edge instead of leaving a dead strip.
     ///
-    /// The four arrows are wider than the old three were, which is what puts the down
-    /// arrow — and so the up arrow above it on row 4 — where the up arrow used to be
-    /// missing from: the arrows are 1.62 against the keys' 1.0, so the group still ends
-    /// flush right at the same place.
-    /// 1.3 + 1.2 + 1.2 + 6.44 + 1.62 + 1.62 + 1.62 = 15.0.
+    /// 1.25 + 1.25 + 1.25 + 5 + 1.25 + 1.25 + 1 + 1 + 1.75 = 15u.
+    /// Down starts at 12.25u, exactly under Up on row 4.
     var row5: [FullKeyCap] {
         [
-            FullKeyCap(.modifier(name: "Ctrl", symbol: "⌃", mod: .leftCtrl), weight: 1.3, L10n.Keyboard.ctrl, .modifier(.leftCtrl)),
-            FullKeyCap(.modifier(name: "Cmd", symbol: "⌘", mod: .leftGUI), weight: 1.2, L10n.Keyboard.meta, .modifier(.leftGUI)),
-            FullKeyCap(.modifier(name: "Opt", symbol: "⌥", mod: .leftAlt), weight: 1.2, L10n.Keyboard.alt, .modifier(.leftAlt)),
-            FullKeyCap(.text("Space"), weight: 6.44, L10n.Keyboard.space, .key(.space)),
-            FullKeyCap(.symbol("arrow.left", ""), weight: 1.62, L10n.Keyboard.left, .key(.leftArrow)),
-            FullKeyCap(.symbol("arrow.down", ""), weight: 1.62, L10n.Keyboard.down, .key(.downArrow)),
-            FullKeyCap(.symbol("arrow.right", ""), weight: 1.62, L10n.Keyboard.right, .key(.rightArrow))
+            FullKeyCap(.modifier(name: "Ctrl", symbol: "⌃", mod: .leftCtrl), weight: 1.25, L10n.Keyboard.ctrl, .modifier(.leftCtrl)),
+            FullKeyCap(.modifier(name: "Opt", symbol: "⌥", mod: .leftAlt), weight: 1.25, L10n.Keyboard.alt, .modifier(.leftAlt)),
+            FullKeyCap(.modifier(name: "Cmd", symbol: "⌘", mod: .leftGUI), weight: 1.25, L10n.Keyboard.meta, .modifier(.leftGUI)),
+            FullKeyCap(.text("Space"), weight: 5.0, L10n.Keyboard.space, .key(.space)),
+            FullKeyCap(.modifier(name: "Cmd", symbol: "⌘", mod: .rightGUI), weight: 1.25, L10n.Keyboard.meta, .modifier(.rightGUI)),
+            FullKeyCap(.modifier(name: "Opt", symbol: "⌥", mod: .rightAlt), weight: 1.25, L10n.Keyboard.alt, .modifier(.rightAlt)),
+            FullKeyCap(.symbol("arrow.left", ""), weight: 1.0, L10n.Keyboard.left, .key(.leftArrow)),
+            FullKeyCap(.symbol("arrow.down", ""), weight: 1.0, L10n.Keyboard.down, .key(.downArrow)),
+            FullKeyCap(.symbol("arrow.right", ""), weight: 1.75, L10n.Keyboard.right, .key(.rightArrow))
         ]
     }
 }
