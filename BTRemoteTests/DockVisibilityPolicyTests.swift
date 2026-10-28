@@ -3,34 +3,24 @@ import XCTest
 
 final class DockVisibilityPolicyTests: XCTestCase {
     func testSettingOffAlwaysKeepsDock() {
-        XCTAssertTrue(policy(hides: false, landscape: true, tab: .remote, page: 0))
+        XCTAssertTrue(policy(hides: false, landscape: true, tab: .input, page: InputPage.keyboard.rawValue))
     }
 
-    func testLandscapeComboHidesDockWhenSettingIsOn() {
-        XCTAssertFalse(policy(hides: true, landscape: true, tab: .remote, page: 0))
+    func testLandscapeKeyboardHidesDockWhenSettingIsOn() {
+        XCTAssertFalse(policy(hides: true, landscape: true, tab: .input, page: InputPage.keyboard.rawValue))
     }
 
     func testPortraitKeepsDock() {
-        XCTAssertTrue(policy(hides: true, landscape: false, tab: .remote, page: 0))
+        XCTAssertTrue(policy(hides: true, landscape: false, tab: .input, page: InputPage.keyboard.rawValue))
     }
 
-    func testOtherKeyboardPageKeepsDock() {
-        XCTAssertTrue(policy(hides: true, landscape: true, tab: .remote, page: 1))
-        XCTAssertTrue(policy(hides: true, landscape: true, tab: .remote, page: 2))
+    func testTrackpadPageKeepsDock() {
+        XCTAssertTrue(policy(hides: true, landscape: true, tab: .input, page: InputPage.trackpad.rawValue))
     }
 
-    func testRemoteModeAndOtherTabsKeepDock() {
-        XCTAssertTrue(
-            DockVisibilityPolicy.showsDock(
-                hidesDockInLandscape: true,
-                isLandscape: true,
-                selectedTab: .remote,
-                remoteMode: .remote,
-                keyboardPageRawValue: 0
-            )
-        )
-        XCTAssertTrue(policy(hides: true, landscape: true, tab: .setup, page: 0))
-        XCTAssertTrue(policy(hides: true, landscape: true, tab: .settings, page: 0))
+    func testOtherTabsKeepDock() {
+        XCTAssertTrue(policy(hides: true, landscape: true, tab: .setup, page: InputPage.keyboard.rawValue))
+        XCTAssertTrue(policy(hides: true, landscape: true, tab: .settings, page: InputPage.keyboard.rawValue))
     }
 
     private func policy(
@@ -43,8 +33,7 @@ final class DockVisibilityPolicyTests: XCTestCase {
             hidesDockInLandscape: hides,
             isLandscape: landscape,
             selectedTab: tab,
-            remoteMode: .keyboard,
-            keyboardPageRawValue: page
+            inputPageRawValue: page
         )
     }
 }
