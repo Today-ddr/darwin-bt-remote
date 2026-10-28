@@ -17,11 +17,10 @@ struct FullKeyboardView: View {
     let releases: InputReleaseCoordinator
 
     @Environment(\.hid) private var hid
-    @State private var mods: KeyboardModifiers = []
-    @State private var isCapsLockOn = false
-    /// Keys currently down, reference counted so two fingers on one cap are one
-    /// logical press and the key is released only when the last finger leaves.
-    @State private var keys = KeyPressTracker()
+    /// Keys, modifier keys and the Caps Lock latch. Both key kinds are reference
+    /// counted, so two fingers on one cap are one logical press and the input is
+    /// released only when the last finger leaves.
+    @State private var state = KeyboardInputState()
     /// Fingers on the key surface, shared with every per-key touch layer.
     @StateObject private var surfaceTouches = KeyTouchCount()
     @State private var releaseToken: InputReleaseCoordinator.Token?
@@ -189,15 +188,15 @@ struct FullKeyboardView: View {
     }
 
     private var isShiftActive: Bool {
-        mods.contains(.leftShift) || mods.contains(.rightShift) || isCapsLockOn
+        state.isShiftActive
     }
 
     private func isKeyArmed(_ key: FullKeyCap) -> Bool {
         switch key.action {
         case let .modifier(mod):
-            mods.contains(mod)
+            state.heldModifiers.contains(mod)
         case .capsLock:
-            isCapsLockOn
+            state.isCapsLockOn
         case .key:
             false
         }
@@ -208,27 +207,46 @@ struct FullKeyboardView: View {
         case let .key(code):
             keyDown(code)
         case let .modifier(mod):
-            toggleMod(mod)
+            modifierDown(mod)
         case .capsLock:
             toggleCapsLock()
         }
     }
 
+    /// A modifier is held only while a finger is on it: the release drops it from
+    /// the report, and the last finger to leave is the one that does it.
     private func handleRelease(_ key: FullKeyCap) {
-        if case let .key(code) = key.action {
+        switch key.action {
+        case let .key(code):
             keyUp(code)
+        case let .modifier(mod):
+            modifierUp(mod)
+        case .capsLock:
+            break
         }
     }
 
     private func keyDown(_ code: Keycode) {
-        guard keys.press(code) else { return }
+        guard state.pressKey(code) else { return }
         sendHeldKeys()
     }
 
     /// Releases one finger from `code`; the key itself is released only when the
     /// last finger leaves, which is what the tracker's count decides.
     private func keyUp(_ code: Keycode) {
-        guard keys.release(code) else { return }
+        guard state.releaseKey(code) else { return }
+        sendHeldKeys()
+    }
+
+    private func modifierDown(_ mod: KeyboardModifiers) {
+        guard state.pressModifier(mod) else { return }
+        sendHeldKeys()
+    }
+
+    /// Releases one finger from `mod`; the bit leaves the report only when the last
+    /// finger leaves, so a second finger on the same modifier cannot drop it.
+    private func modifierUp(_ mod: KeyboardModifiers) {
+        guard state.releaseModifier(mod) else { return }
         sendHeldKeys()
     }
 
@@ -236,63 +254,21 @@ struct FullKeyboardView: View {
     /// repeatedly: with nothing held it sends nothing, so a second interruption
     /// cannot produce a second transition.
     private func releaseEverything() {
-        let hadKeyboardState = !keys.isEmpty || !mods.isEmpty
-        keys.removeAll()
-        mods.removeAll()
-        guard hadKeyboardState else { return }
+        guard state.releaseEverything() else { return }
         hid.sendKeyboard(.zero)
     }
 
     private func sendHeldKeys() {
-        var effectiveMods = mods
-        if isCapsLockOn {
-            for key in keys.heldKeys where isLetter(key) {
-                effectiveMods.insert(.leftShift)
-            }
-        }
-        hid.sendKeyboard(
-            KeyboardReport(
-                modifiers: effectiveMods,
-                keys: keys.heldKeys.sorted { $0.rawValue < $1.rawValue }
-            )
-        )
+        hid.sendKeyboard(state.report)
     }
 
     /// Caps Lock stays a toggle, but the tap is sent with the current held keys
     /// folded in and then followed by the held-key report, so a key that was down
     /// when Caps was tapped is not dropped by the tap's release report.
     private func toggleCapsLock() {
-        isCapsLockOn.toggle()
-        var reportKeys = keys.heldKeys
-        reportKeys.insert(.capsLock)
-        hid.sendKeyboard(
-            KeyboardReport(
-                modifiers: mods,
-                keys: reportKeys.sorted { $0.rawValue < $1.rawValue }
-            )
-        )
+        state.toggleCapsLock()
+        hid.sendKeyboard(state.report(adding: .capsLock))
         sendHeldKeys()
-    }
-
-    private func toggleMod(_ mod: KeyboardModifiers) {
-        if mods.contains(mod) {
-            mods.subtract(mod)
-        } else {
-            mods.insert(mod)
-        }
-        if !keys.isEmpty {
-            sendHeldKeys()
-        }
-    }
-
-    private func isLetter(_ key: Keycode) -> Bool {
-        switch key {
-        case .a, .b, .c, .d, .e, .f, .g, .h, .i, .j, .k, .l, .m,
-             .n, .o, .p, .q, .r, .s, .t, .u, .v, .w, .x, .y, .z:
-            true
-        default:
-            false
-        }
     }
 }
 

@@ -97,7 +97,7 @@ struct KeyboardReport: Sendable, Equatable {
     }
 }
 
-struct KeyboardModifiers: OptionSet, Sendable, Equatable {
+struct KeyboardModifiers: OptionSet, Sendable, Hashable {
     let rawValue: UInt8
     static let leftCtrl = KeyboardModifiers(rawValue: 1 << 0)
     static let leftShift = KeyboardModifiers(rawValue: 1 << 1)
