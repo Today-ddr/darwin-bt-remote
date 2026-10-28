@@ -42,13 +42,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bluetooth Remote uses Bluetooth to act as a wireless keyboard, mouse, and media remote for your computer, TV, or other devices."
+            "value" : "Bluetooth Remote uses Bluetooth to act as a wireless keyboard and mouse for your computer, TV, or other devices."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "蓝牙遥控器使用蓝牙，将本设备作为无线键盘、鼠标和媒体遥控器，用于控制你的电脑、电视或其他设备。"
+            "value" : "蓝牙遥控器使用蓝牙，将本设备作为无线键盘和鼠标，用于控制你的电脑、电视或其他设备。"
           }
         }
       }

@@ -5,7 +5,6 @@ struct ContentView: View {
 
     @Environment(\.hid) private var hid
     @Environment(\.appTheme) private var appTheme
-    @StateObject private var directInput = DirectInputController()
     @Environment(\.openURL) private var openURL
     @AppStorage(AppSettings.hasSeenWelcomeKey) private var hasSeenWelcome = false
     @AppStorage(AppSettings.fullscreenKeyboardKey) private var fullscreenKeyboard = true
@@ -15,8 +14,6 @@ struct ContentView: View {
 
     var body: some View {
         rootTabs
-            .environmentObject(directInput)
-            .background(PointerLockHost(locked: directInput.isCapturing))
             .onChange(of: hid.isConnected) { connected in
                 guard connected else { return }
                 tab = .input

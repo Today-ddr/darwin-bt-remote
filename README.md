@@ -10,7 +10,7 @@
 
 As the Apple counterpart of [BT Remote for Android](https://github.com/jqssun/android-bt-remote), it acts as a Bluetooth HID controller for Windows, Linux, macOS, iOS (and iPadOS), tvOS, Android (and Android TV, Google TV, Fire OS), ChromeOS, and SteamOS, plus any other host that supports a standard Bluetooth keyboard or mouse.
 
-Unlike network remote-control tools, it needs nothing installed on the target and relies solely on the host's built-in Bluetooth HID support. Your Apple device presents itself as a standard [Bluetooth Human Interface Device (HID)](https://www.bluetooth.com/specifications/specs/hid-service-specification/) and sends keyboard and mouse input directly over Bluetooth. It also features a direct input mode where you can forward the currently connected hardware input straight to the target device.
+Unlike network remote-control tools, it needs nothing installed on the target and relies solely on the host's built-in Bluetooth HID support. Your Apple device presents itself as a standard [Bluetooth Human Interface Device (HID)](https://www.bluetooth.com/specifications/specs/hid-service-specification/) and sends keyboard and mouse input directly over Bluetooth.
 
 [<img height="48" alt="Get it on App Store" src="https://jqssun.github.io/images/badges/apple-app-store.svg">](https://apps.apple.com/app/id6778921831)
 [<img height="48" alt="Get it on GitHub" src="https://jqssun.github.io/images/badges/github.svg">](https://github.com/jqssun/darwin-bt-remote/releases/latest)

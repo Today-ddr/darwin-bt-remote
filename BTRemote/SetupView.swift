@@ -5,7 +5,6 @@ struct SetupView: View {
     @EnvironmentObject private var lowEnergy: HIDPeripheral
     @EnvironmentObject private var central: HIDCentral
     @EnvironmentObject private var names: DeviceNameStore
-    @EnvironmentObject private var directInput: DirectInputController
     @AppStorage(AppSettings.developerModeKey) private var developerMode = false
     @AppStorage(AppSettings.advertisedNameKey) private var advertisedName = L10n.Bluetooth.advertisedName
     @State private var selectedInfo: DeviceEntry?
@@ -19,11 +18,6 @@ struct SetupView: View {
             form.navigationTitle(L10n.App.title)
         }
         .navigationViewStyle(.stack)
-        .onChange(of: hid.isActive) { isActive in
-            if !isActive {
-                directInput.stop()
-            }
-        }
     }
 
     private var form: some View {
@@ -34,9 +28,6 @@ struct SetupView: View {
                 connectedDevicesSection
             }
             statusSection
-            if hid.isActive {
-                directInputSection
-            }
             if let lastError = hid.activeError {
                 Section(header: Text(L10n.Section.lastError)) {
                     Text(verbatim: lastError).foregroundColor(.red).font(.caption)
@@ -197,38 +188,6 @@ struct SetupView: View {
         )
     }
 
-    /// On-screen GameController input, still reachable on iPadOS. It is not the
-    /// macOS event-tap capture that used to live here.
-    private var directInputSection: some View {
-        Section(
-            header: Text(L10n.DirectInput.section),
-            footer: Text(directInput.hasInputDevice ? L10n.DirectInput.releaseHint : L10n.DirectInput.iosNoDevice)
-        ) {
-            Toggle(isOn: directInputBinding) {
-                Label(L10n.DirectInput.toggle, systemImage: "rectangle.and.hand.point.up.left")
-            }
-            .disabled(!directInput.hasInputDevice)
-            if let lastError = directInput.lastError {
-                Text(verbatim: lastError)
-                    .font(.caption)
-                    .foregroundColor(.red)
-            }
-        }
-    }
-
-    private var directInputBinding: Binding<Bool> {
-        Binding(
-            get: { directInput.isCapturing },
-            set: { shouldCapture in
-                if shouldCapture {
-                    directInput.start(hid)
-                } else {
-                    directInput.stop()
-                }
-            }
-        )
-    }
-
     private func row(_ title: LocalizedStringKey, _ value: Text) -> some View {
         HStack {
             Text(title)
@@ -274,6 +233,5 @@ private extension KeyboardLEDs {
             .environmentObject(HIDPeripheral())
             .environmentObject(HIDCentral())
             .environmentObject(DeviceNameStore())
-            .environmentObject(DirectInputController())
     }
 #endif

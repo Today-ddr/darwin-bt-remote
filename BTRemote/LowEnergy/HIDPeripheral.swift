@@ -434,8 +434,7 @@ final class HIDPeripheral: NSObject, ObservableObject {
     }
 
     /// Releases everything a host could be holding. One zeroed report covers all of it:
-    /// whether the key was pressed through the combo pages, the full keyboard or the
-    /// direct-input capture, the keyboard state lives in one report, and clearing that is
+    /// every key the full keyboard can press lives in that report, and clearing it is
     /// what tells the host nothing is down any more.
     private func _releaseHeldKeys() {
         sendKeyboard(.zero)
