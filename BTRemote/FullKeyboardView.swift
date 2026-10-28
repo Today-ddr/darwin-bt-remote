@@ -19,6 +19,7 @@ private let bubbleGap: CGFloat = 4
 private let bubbleExtraHeight: CGFloat = 12
 private let bubbleCornerRadius: CGFloat = 8
 private let bubbleLabelScale: CGFloat = 1.3
+
 struct FullKeyboardView: View {
     @Environment(\.hid) private var hid
     @Environment(\.scenePhase) private var scenePhase
@@ -45,63 +46,25 @@ struct FullKeyboardView: View {
         // device and the orientation we are actually in.
         GeometryReader { outer in
             let insets = outer.safeAreaInsets
-            ZStack {
-                GeometryReader { geo in
-                    keyboard(size: geo.size)
-                }
-                .padding(.horizontal, keyHorizontalMargin)
-                .padding(.vertical, 4)
-                // Keep the keys out from under the island and out of the rounded corners, which
-                // in landscape sit at the leading and trailing edges. The padding is the system's
-                // own safe-area inset rather than a per-model number: the system measures it for
-                // the device, the orientation and the window it is actually running in, so an
-                // unlisted phone, split view and iPad all follow without a device table to keep
-                // current. Portrait reports ~0 sideways and the island is then a top inset, which
-                // the vertical insets below already handle, so nothing shrinks there.
-                .padding(EdgeInsets(top: 0, leading: insets.leading, bottom: 0, trailing: insets.trailing))
+            GeometryReader { geo in
+                keyboard(size: geo.size)
             }
-            // Extend the whole composed surface, including the badge overlays, into the horizontal
-            // safe area. The keys still stop at the island because of the padding above, while the
-            // badges can use the real screen edge as their coordinate origin. Vertical insets stay,
-            // so the top row still clears the status bar and the bottom row the home indicator.
+            .padding(.horizontal, keyHorizontalMargin)
+            .padding(.vertical, 4)
+            // Keep the keys out from under the island and out of the rounded corners, which
+            // in landscape sit at the leading and trailing edges. The padding is the system's
+            // own safe-area inset rather than a per-model number: the system measures it for
+            // the device, the orientation and the window it is actually running in, so an
+            // unlisted phone, split view and iPad all follow without a device table to keep
+            // current. Portrait reports ~0 sideways and the island is then a top inset, which
+            // the vertical insets below already handle, so nothing shrinks there.
+            .padding(EdgeInsets(top: 0, leading: insets.leading, bottom: 0, trailing: insets.trailing))
+            // The keyboard is still allowed the full width of the device: that reclaims the
+            // wide empty margin the safe area would otherwise leave in landscape. The keys
+            // themselves stop at the island because of the padding above. Only the horizontal
+            // edges are ignored: the vertical insets stay, so the top row still clears the
+            // status bar and the bottom row still clears the home indicator.
             .ignoresSafeArea(.container, edges: .horizontal)
-            // These badges are siblings of the keyboard, not modifiers on the padded keyboard
-            // layer. That keeps their leading/trailing coordinates anchored to the real screen
-            // ear instead of inheriting the keyboard's safe-area padding and moving into Esc.
-            .overlay(alignment: .topLeading) {
-                #if os(iOS)
-                    if KeyboardEarLayoutPolicy.showsBadge(
-                        in: outer.size,
-                        earWidth: insets.leading
-                    ) {
-                        KeyboardStatusBadge(status: statusSnapshot, content: .connection)
-                            .padding(
-                                .leading,
-                                KeyboardEarLayoutPolicy.badgePadding(for: insets.leading)
-                            )
-                            .padding(.top, 4)
-                            .allowsHitTesting(false)
-                    }
-                #endif
-            }
-            .overlay(alignment: .topTrailing) {
-                #if os(iOS)
-                    if statusSnapshot.modifierGlyph != nil,
-                       KeyboardEarLayoutPolicy.showsBadge(
-                           in: outer.size,
-                           earWidth: insets.trailing
-                       )
-                    {
-                        KeyboardStatusBadge(status: statusSnapshot, content: .modifiers)
-                            .padding(
-                                .trailing,
-                                KeyboardEarLayoutPolicy.badgePadding(for: insets.trailing)
-                            )
-                            .padding(.top, 4)
-                            .allowsHitTesting(false)
-                    }
-                #endif
-            }
         }
         // last line of defence: nothing is touching the surface, so nothing may stay held.
         // This fires now that `KeyTouchCount` publishes its value; it can arrive at the same
@@ -122,17 +85,6 @@ struct FullKeyboardView: View {
     }
 
     // MARK: - Keyboard
-
-    private var statusSnapshot: KeyboardStatusSnapshot {
-        KeyboardStatusSnapshot(
-            isActive: hid.isActive,
-            isConnected: hid.isConnected,
-            connectedHostCount: hid.connectedHostCount,
-            errorMessage: hid.activeError,
-            isCapsLockOn: isCapsLockOn,
-            isShiftActive: isShiftActive
-        )
-    }
 
     /// One six-row layout in both orientations, with a side trackpad when landscape
     /// leaves enough width for both surfaces to remain usable.

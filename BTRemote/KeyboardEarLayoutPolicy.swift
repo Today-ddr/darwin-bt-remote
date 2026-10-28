@@ -1,9 +1,8 @@
 import CoreGraphics
 
-/// Positions the landscape status badges inside the two horizontal safe-area
-/// ears. The frame is measured on the unmodified screen, before the keyboard
-/// adds its own safe-area padding, so the ear and key coordinates cannot drift
-/// apart when the keyboard extends under the rounded corners.
+/// Positions the landscape status badge inside the horizontal safe-area ear.
+/// The badge is hosted by the root content view, outside the keyboard's safe
+/// area, so its coordinate origin is the screen rather than the leading key.
 enum KeyboardEarLayoutPolicy {
     static let badgeWidth: CGFloat = 38
     static let minimumEarWidth: CGFloat = 42
@@ -15,5 +14,12 @@ enum KeyboardEarLayoutPolicy {
 
     static func badgePadding(for earWidth: CGFloat) -> CGFloat {
         max(minimumEdgePadding, (earWidth - badgeWidth) / 2)
+    }
+
+    static func badgeLeadingOffset(
+        for earWidth: CGFloat,
+        coordinateOriginX: CGFloat
+    ) -> CGFloat {
+        badgePadding(for: earWidth) - coordinateOriginX
     }
 }

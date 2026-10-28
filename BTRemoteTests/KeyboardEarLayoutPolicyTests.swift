@@ -14,6 +14,25 @@ final class KeyboardEarLayoutPolicyTests: XCTestCase {
         )
     }
 
+    func testBadgeOffsetCompensatesForAViewThatStartsInsideTheSafeArea() {
+        XCTAssertEqual(
+            KeyboardEarLayoutPolicy.badgeLeadingOffset(
+                for: 59,
+                coordinateOriginX: 0
+            ),
+            10.5,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            KeyboardEarLayoutPolicy.badgeLeadingOffset(
+                for: 59,
+                coordinateOriginX: 59
+            ),
+            -48.5,
+            accuracy: 0.001
+        )
+    }
+
     func testPortraitHidesEarBadges() {
         XCTAssertFalse(
             KeyboardEarLayoutPolicy.showsBadge(
