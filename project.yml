@@ -3,7 +3,6 @@ options:
   bundleIdPrefix: io.github.jqssun
   deploymentTarget:
     iOS: "15.0"
-    macOS: "13.0"
   createIntermediateGroups: true
   generateEmptyDirectories: true
   groupSortPosition: top
@@ -14,7 +13,6 @@ settings:
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
     IPHONEOS_DEPLOYMENT_TARGET: "15.0"
-    MACOSX_DEPLOYMENT_TARGET: "13.0"
     ENABLE_PREVIEWS: YES
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: ""
@@ -24,13 +22,9 @@ settings:
 targets:
   BTRemote:
     type: application
-    supportedDestinations: [iOS, macOS]
+    platform: iOS
     sources:
       - path: BTRemote
-        excludes:
-          - entitlements.plist
-      - path: BTRemote/entitlements.plist
-        buildPhase: none
     resources:
       - BTRemote/Assets.xcassets
       - BTRemote/PrivacyInfo.xcprivacy
@@ -44,10 +38,10 @@ targets:
         INFOPLIST_FILE: BTRemote/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
-        "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": BTRemote/entitlements.plist
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
   BTRemoteTests:
     type: bundle.unit-test
-    platform: macOS
+    platform: iOS
     sources:
       - path: BTRemoteTests
     dependencies:

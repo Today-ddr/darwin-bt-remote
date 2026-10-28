@@ -43,17 +43,12 @@ struct DeviceListView: View {
                 }
             }
         }
-        #if os(macOS)
-        .formStyle(.grouped)
-        #endif
         .navigationTitle(L10n.Section.devices)
-        #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-        #endif
-            .toolbar { sortMenu }
-            .sheet(item: $selectedInfo) { DeviceInfoView(entry: $0) }
-            .onAppear { central.startScan() }
-            .onDisappear { central.stopScan() }
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { sortMenu }
+        .sheet(item: $selectedInfo) { DeviceInfoView(entry: $0) }
+        .onAppear { central.startScan() }
+        .onDisappear { central.stopScan() }
     }
 
     @ToolbarContentBuilder

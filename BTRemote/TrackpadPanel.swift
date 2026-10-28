@@ -2,135 +2,92 @@ import SwiftUI
 
 struct TrackpadPanel: View {
     let hid: HIDInput
-    /// Set to false to embed the touch surface alone, without the mouse buttons and scroll column.
-    var showsControls = true
+    let releases: InputReleaseCoordinator
 
     @Environment(\.appTheme) private var appTheme
     @AppStorage(AppSettings.touchpadSensitivityKey) private var touchpadSensitivity = AppSettings.defaultPointerSensitivity
     @AppStorage(AppSettings.scrollSensitivityKey) private var scrollSensitivity = AppSettings.defaultScrollSensitivity
     @AppStorage(AppSettings.invertScrollKey) private var invertScroll = false
     @AppStorage(AppSettings.doubleTapDragKey) private var doubleTapDrag = true
+    @AppStorage(AppSettings.longPressDragKey) private var longPressDrag = true
     @AppStorage(AppSettings.pinchGestureActionKey) private var pinchActionRaw = GestureDefaults.pinch.rawValue
     @AppStorage(AppSettings.rotationGestureActionKey) private var rotateActionRaw = GestureDefaults.rotation.rawValue
     @State private var activeButtons: MouseButtons = []
-    #if os(macOS)
-        @State private var dragOffset: CGSize = .zero
-    #endif
+    @State private var releaseToken: InputReleaseCoordinator.Token?
+    @State private var releaseHandle = TouchpadReleaseHandle()
+
+    @MainActor
+    init(hid: HIDInput, releases: InputReleaseCoordinator) {
+        self.hid = hid
+        self.releases = releases
+    }
 
     var body: some View {
-        VStack(spacing: cellGap) {
-            if showsControls {
-                HStack(spacing: cellGap) {
-                    surface
-                    scrollColumn.frame(width: 46)
-                }
-                .frame(maxHeight: .infinity)
-                #if os(macOS)
-                    // The touch surface is a bare `DragGesture` on macOS: it carries
-                    // pointer movement and nothing else, and `TouchpadView` — which is
-                    // where left and right click come from on iOS — is inside
-                    // `#if os(iOS)`. Without this row the buttons that used to sit here
-                    // would leave macOS with no way to click at all, so the pointer pair
-                    // is restored for macOS only. The middle button it replaced stays in
-                    // the scroll column above, so only the two that had no other home
-                    // are repeated here.
-                    pointerButtonsRow
-                #endif
-            } else {
-                surface
+        HStack(spacing: cellGap) {
+            surface
+            scrollColumn.frame(width: 46)
+        }
+        .frame(maxHeight: .infinity)
+        .onAppear {
+            releaseToken = releases.register { releaseEverything() }
+        }
+        .onDisappear {
+            if let releaseToken {
+                releases.unregister(releaseToken)
+                self.releaseToken = nil
             }
+            releaseEverything()
         }
     }
 
     private var surface: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 12).fill(appTheme.controlFill)
-            #if os(iOS)
-                TouchpadView(
-                    moveSensitivity: touchpadSensitivity,
-                    scrollSensitivity: scrollSensitivity,
-                    invertScroll: invertScroll,
-                    doubleTapDragEnabled: doubleTapDrag,
-                    onMove: { dx, dy, isDragging in
-                        var buttons = activeButtons
-                        if isDragging {
-                            buttons.insert(.left)
-                        }
-                        hid.sendMouse(MouseReport(buttons: buttons, dX: dx, dY: dy))
-                    },
-                    onScroll: { hid.scroll($0) },
-                    onLeftClick: { Haptics.tap(from: .trackpad); hid.click(.left) },
-                    onRightClick: { Haptics.tap(from: .trackpad); hid.click(.right) },
-                    onDragEnd: {
-                        hid.sendMouse(MouseReport(buttons: activeButtons))
-                    },
-                    onGestureAction: { action in
-                        action.execute(hid: hid)
-                    },
-                    onZoom: { delta in
-                        handlePinchZoom(delta: delta)
-                    },
-                    onRotate: { delta in
-                        handleRotation(delta: delta)
+            TouchpadView(
+                moveSensitivity: touchpadSensitivity,
+                scrollSensitivity: scrollSensitivity,
+                invertScroll: invertScroll,
+                doubleTapDragEnabled: doubleTapDrag,
+                longPressDragEnabled: longPressDrag,
+                releaseHandle: releaseHandle,
+                onMove: { dx, dy, isDragging in
+                    var buttons = activeButtons
+                    if isDragging {
+                        buttons.insert(.left)
                     }
-                )
-            #endif
+                    hid.sendMouse(MouseReport(buttons: buttons, dX: dx, dY: dy))
+                },
+                onScroll: { hid.scroll($0) },
+                onLeftClick: { Haptics.tap(from: .trackpad); hid.click(.left) },
+                onRightClick: { Haptics.tap(from: .trackpad); hid.click(.right) },
+                onDragEnd: {
+                    hid.sendMouse(MouseReport(buttons: activeButtons))
+                },
+                onGestureAction: { action in
+                    action.execute(hid: hid)
+                },
+                onZoom: { delta in
+                    handlePinchZoom(delta: delta)
+                },
+                onRotate: { delta in
+                    handleRotation(delta: delta)
+                }
+            )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        #if os(macOS)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture()
-                    .onChanged { value in
-                        let dx = HIDInput.clamp((value.translation.width - dragOffset.width) * touchpadSensitivity)
-                        let dy = HIDInput.clamp((value.translation.height - dragOffset.height) * touchpadSensitivity)
-                        dragOffset = value.translation
-                        hid.sendMouse(MouseReport(buttons: activeButtons, dX: dx, dY: dy))
-                    }
-                    .onEnded { _ in
-                        dragOffset = .zero
-                        hid.sendMouse(MouseReport(buttons: activeButtons))
-                    }
-            )
-        #endif
     }
 
-    // Left and right click, restored for macOS.
-    //
-    // macOS gets its clicks from here and nowhere else: the trackpad surface itself
-    // only reports pointer movement, and the iOS touch gestures — the one-finger tap
-    // for a left click and the two-finger tap for a right click — are not built on
-    // macOS. A row of two buttons under the touch surface is the smallest thing that
-    // puts both back, and it sits where the left / middle / right row was before the
-    // middle button moved into the scroll column, so the panel keeps its old shape.
-    // They are `HoldButton`s, as that row was, so they hold the button down and drag
-    // like the ones they replaced rather than only clicking on release.
-    #if os(macOS)
-        private var pointerButtonsRow: some View {
-            HStack(spacing: cellGap) {
-                mouseButton(.left, "cursorarrow.click", L10n.Mouse.leftButton)
-                mouseButton(.right, "cursorarrow.click.2", L10n.Mouse.rightButton)
-            }
-            .frame(height: 44)
+    /// Idempotent: the drag is released once, the three pointer buttons are let go,
+    /// and a zero report goes out only when something was actually held. A second
+    /// call while nothing is held produces no second button transition.
+    private func releaseEverything() {
+        let hadButtons = !activeButtons.isEmpty
+        releaseHandle.releaseNow()
+        activeButtons = []
+        if hadButtons {
+            hid.sendMouse(.zero)
         }
-
-        private func mouseButton(_ button: MouseButtons, _ icon: String, _ label: LocalizedStringKey) -> some View {
-            HoldButton(
-                onPress: {
-                    activeButtons.insert(button)
-                    hid.sendMouse(MouseReport(buttons: activeButtons))
-                },
-                onRelease: {
-                    activeButtons.remove(button)
-                    hid.sendMouse(MouseReport(buttons: activeButtons))
-                },
-                hapticSource: .trackpad,
-                background: { RoundedRectangle(cornerRadius: 12).fill(appTheme.controlFill) },
-                label: { Image(systemName: icon).font(.body) }
-            )
-            .accessibilityLabel(label)
-        }
-    #endif
+    }
 
     /// Pinch falls back to zoom, which is the closest a keyboard can come to a
     /// MacBook pinch: a real pinch reports a continuous separation, and the
@@ -148,11 +105,8 @@ struct TrackpadPanel: View {
 
     /// Rotation is unset by default, and unset means do nothing.
     ///
-    /// It used to mean `rotateRight`, which sends `Cmd+R` — the frontmost app's
-    /// refresh/restart shortcut — so a two-finger turn the user did not intend
-    /// as a rotation could reload or restart whatever app was in front. A
-    /// rotation event carries an angle and HID keyboard and mouse reports
-    /// cannot express one, so there is no faithful binding to fall back to; the
+    /// A rotation event carries an angle and HID keyboard and mouse reports
+    /// cannot express one, so there is no faithful binding to fall back to. The
     /// rotate actions stay in the picker for anyone who wants them, but they
     /// are chosen, never assumed.
     private func handleRotation(delta: CGFloat) {
@@ -161,9 +115,6 @@ struct TrackpadPanel: View {
         case .none:
             break
         case .rotateRight, .rotateLeft:
-            // Both directions share this gesture, so the one that was picked is
-            // the one that runs. The default (`none`) is handled above and
-            // never reaches here.
             if delta > 0 {
                 TrackpadGestureAction.rotateRight.execute(hid: hid)
             } else {
@@ -174,20 +125,15 @@ struct TrackpadPanel: View {
         }
     }
 
-    private var scrollAmount: Int8 {
-        max(1, HIDInput.clamp(CGFloat(3 * scrollSensitivity)))
-    }
-
     private var scrollColumn: some View {
         VStack(spacing: cellGap) {
-            scrollButton("arrow.up", L10n.Mouse.wheelUp, scrollAmount)
+            scrollButton("arrow.up", L10n.Mouse.wheelUp, direction: 1)
             middleButton
-            scrollButton("arrow.down", L10n.Mouse.wheelDown, -scrollAmount)
+            scrollButton("arrow.down", L10n.Mouse.wheelDown, direction: -1)
         }
     }
 
-    /// Middle click, held down for as long as the button is pressed just like
-    /// the pointer buttons it used to sit beside.
+    /// Middle click, held down for as long as the button is pressed.
     private var middleButton: some View {
         HoldButton(
             onPress: {
@@ -205,17 +151,34 @@ struct TrackpadPanel: View {
         .accessibilityLabel(L10n.Mouse.middleButton)
     }
 
-    private func scrollButton(_ icon: String, _ label: LocalizedStringKey, _ wheel: Int8) -> some View {
+    /// One tap is one small relative wheel step. The sign follows the natural /
+    /// inverted preference, the built-in press haptic is silenced so the scroll
+    /// tick is the only feedback, and `HIDInput.scroll` sends the wheel report
+    /// alone — no zero immediately behind it that the host could coalesce away.
+    private func scrollButton(_ icon: String, _ label: LocalizedStringKey, direction: Int8) -> some View {
         HoldButton(
             onPress: {
-                hid.scroll(wheel)
+                hid.scroll(
+                    ScrollStep.wheel(
+                        direction: direction,
+                        scrollSensitivity: scrollSensitivity,
+                        invertScroll: invertScroll
+                    )
+                )
                 Haptics.scrollTick()
             },
             onRelease: {},
-            hapticSource: .trackpad,
+            hapticSource: nil,
             background: { RoundedRectangle(cornerRadius: 12).fill(appTheme.controlFill) },
             label: { Image(systemName: icon).font(.body) }
         )
         .accessibilityLabel(label)
     }
 }
+
+#if DEBUG
+    #Preview {
+        TrackpadPanel(hid: .unavailable, releases: InputReleaseCoordinator())
+            .padding()
+    }
+#endif

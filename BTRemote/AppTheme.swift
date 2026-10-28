@@ -1,9 +1,5 @@
 import SwiftUI
-#if os(iOS)
-    import UIKit
-#else
-    import AppKit
-#endif
+import UIKit
 
 enum AppTheme: String, CaseIterable, Identifiable, Sendable {
     case system
@@ -49,14 +45,7 @@ enum AppTheme: String, CaseIterable, Identifiable, Sendable {
     }
 
     var opaquePageBackground: Color {
-        if usesPureBlackSurface {
-            return .black
-        }
-        #if os(iOS)
-            return Color(uiColor: .systemBackground)
-        #else
-            return Color(nsColor: .windowBackgroundColor)
-        #endif
+        usesPureBlackSurface ? .black : Color(uiColor: .systemBackground)
     }
 
     var dockFill: Color {
@@ -64,13 +53,6 @@ enum AppTheme: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-private struct AppThemeKey: EnvironmentKey {
-    static let defaultValue: AppTheme = .system
-}
-
 extension EnvironmentValues {
-    var appTheme: AppTheme {
-        get { self[AppThemeKey.self] }
-        set { self[AppThemeKey.self] = newValue }
-    }
+    @Entry var appTheme: AppTheme = .system
 }

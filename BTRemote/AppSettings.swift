@@ -12,13 +12,10 @@ enum AppSettings {
     /// UUID strings of the hosts the user removed; a removal has to outlive the launch that made it
     static let blockedCentralsKey = "BTRemote.blockedCentrals"
     static let hasSeenWelcomeKey = "BTRemote.hasSeenWelcome"
-    static let liveTypingKey = "BTRemote.liveTyping"
-    static let remoteModeKey = "BTRemote.remoteMode"
-    static let keyboardPageKey = "BTRemote.keyboardPage"
+    /// Raw value of `InputPage`; the last page shown in the input tab.
+    static let inputPageKey = "BTRemote.inputPage"
     static let fullscreenKeyboardKey = "BTRemote.fullscreenKeyboard"
     static let advertisedNameKey = "BTRemote.advertisedName"
-    static let precisionTouchpadKey = "BTRemote.precisionTouchpad"
-    static let naturalScrollKey = "BTRemote.naturalScroll"
     static let invertScrollKey = "BTRemote.invertScroll"
     static let pinchGestureActionKey = "BTRemote.pinchGestureAction"
     static let threeFingerSwipeUpKey = "BTRemote.threeFingerSwipeUp"
@@ -33,11 +30,12 @@ enum AppSettings {
     static let fourFingerTapKey = "BTRemote.fourFingerTap"
     static let rotationGestureActionKey = "BTRemote.rotationGestureAction"
     static let doubleTapDragKey = "BTRemote.doubleTapDrag"
+    static let longPressDragKey = "BTRemote.longPressDrag"
     static let hapticsEnabledKey = "BTRemote.hapticsEnabled"
     static let hapticsTrackpadKey = "BTRemote.hapticsTrackpad"
     static let hapticsKeyboardKey = "BTRemote.hapticsKeyboard"
     static let hapticsScrollKey = "BTRemote.hapticsScroll"
-    /// Raw value of `Haptics.Intensity`; unknown or absent values read as `.strong`.
+    /// Raw value of `Haptics.Intensity`; unknown or absent values read as `.medium`.
     static let hapticsIntensityKey = "BTRemote.hapticsIntensity"
 
     static let maxAdvertisedNameLength = 26
@@ -55,41 +53,33 @@ enum AppSettings {
 ///
 /// A gesture needs a default in two places: the picker shows one when the user
 /// has never chosen (`TrackpadGestureSettingsView`) and the recognizer applies
-/// one when nothing is stored (`TouchpadView`). Those used to each spell the
-/// value out, and a drift between two copies is invisible on screen — the
-/// picker would name one action while the gesture performed another. Both sides
-/// read this table instead.
+/// one when nothing is stored (`TouchpadView`). Both sides read this table so a
+/// drift between two copies cannot make the picker name one action while the
+/// gesture performs another.
 ///
-/// These defaults follow Apple platform semantics, and four of them are
-/// macOS-only chords (Mission Control, App Exposé, switching Spaces). The
-/// controlled device is not necessarily an Apple device — it may be Windows,
-/// Linux, Android or tvOS, where `Ctrl`+arrow means something else or nothing
-/// at all — and nothing here can detect that, so treat these as Apple-host
-/// defaults rather than universal ones.
+/// These defaults follow Apple platform semantics: Mission Control, App Exposé
+/// and switching Spaces are macOS gestures, and the controlled Mac is the
+/// device this app targets.
 enum GestureDefaults {
     /// Pinch keeps zoom: `Cmd+=` / `Cmd+-` is the closest a keyboard can come
-    /// to a continuous pinch, and the continuous path lives in
-    /// `TrackpadPanel.handlePinchZoom`.
+    /// to a continuous pinch.
     static let pinch = TrackpadGestureAction.zoom
     /// Rotation is off, not remapped. A rotation event reports an angle, and
     /// HID keyboard and mouse reports cannot express one, so any binding here
-    /// is a guess. The guess it used to fall back to was `rotateRight`, which
-    /// sends `Cmd+R` — the frontmost app's refresh/restart shortcut — so a
-    /// stray two-finger turn could reload or restart whatever app was in front.
+    /// is a guess.
     static let rotation = TrackpadGestureAction.none
 
-    static let threeFingerSwipeUp = TrackpadGestureAction.appSwitcher
-    static let threeFingerSwipeDown = TrackpadGestureAction.home
-    static let threeFingerSwipeLeft = TrackpadGestureAction.previousApp
-    static let threeFingerSwipeRight = TrackpadGestureAction.nextApp
-    static let threeFingerTap = TrackpadGestureAction.spotlight
+    static let threeFingerSwipeUp = TrackpadGestureAction.missionControl
+    static let threeFingerSwipeDown = TrackpadGestureAction.appExpose
+    static let threeFingerSwipeLeft = TrackpadGestureAction.switchSpaceLeft
+    static let threeFingerSwipeRight = TrackpadGestureAction.switchSpaceRight
+    static let threeFingerTap = TrackpadGestureAction.none
 
-    /// Four fingers, macOS semantics: Mission Control, App Exposé and Spaces,
-    /// which are the `Ctrl`+arrow chords rather than the iPadOS ones the
-    /// three-finger row uses.
+    /// Four fingers use the same macOS semantics as three, so a gesture does
+    /// not change meaning with the number of fingers used for it.
     static let fourFingerSwipeUp = TrackpadGestureAction.missionControl
     static let fourFingerSwipeDown = TrackpadGestureAction.appExpose
     static let fourFingerSwipeLeft = TrackpadGestureAction.switchSpaceLeft
     static let fourFingerSwipeRight = TrackpadGestureAction.switchSpaceRight
-    static let fourFingerTap = TrackpadGestureAction.controlCenter
+    static let fourFingerTap = TrackpadGestureAction.none
 }

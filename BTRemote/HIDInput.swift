@@ -1,9 +1,7 @@
 import CoreGraphics
 import Foundation
 import SwiftUI
-#if os(iOS)
-    import UIKit
-#endif
+import UIKit
 
 /// routes UI input to the active HID backend
 struct HIDInput {
@@ -23,64 +21,21 @@ struct HIDInput {
         sendKeyboard(.zero)
     }
 
-    func keyDown(_ key: Keycode, modifiers: KeyboardModifiers = []) {
-        sendKeyboard(KeyboardReport(modifiers: modifiers, keys: [key]))
-    }
-
-    func keyUp() {
-        sendKeyboard(.zero)
-    }
-
-    func tap(consumer: ConsumerKey) {
-        sendConsumer(ConsumerReport(key: consumer))
-        sendConsumer(.zero)
-    }
-
-    func toggleVirtualKeyboard() {
-        tap(consumer: .eject)
-    }
-
-    @MainActor
+    /// A click is a press immediately followed by the matching release, both applied
+    /// on the main actor in call order. There is no deferred release that a later
+    /// press could race: an older zero can therefore never overwrite a newer press.
     func click(_ button: MouseButtons) {
         sendMouse(MouseReport(buttons: button))
-        let sender = sendMouse
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 25_000_000)
-            sender(.zero)
-        }
-    }
-
-    func move(dx: Int8, dy: Int8, buttons: MouseButtons = []) {
-        sendMouse(MouseReport(buttons: buttons, dX: dx, dY: dy))
-    }
-
-    func scroll(_ wheel: Int8) {
-        sendMouse(MouseReport(wheel: wheel))
         sendMouse(.zero)
     }
 
-    func type(_ character: Character) {
-        guard let (key, mods) = mapASCII(character) else { return }
-        sendKeyboard(KeyboardReport(modifiers: mods, keys: [key]))
-        sendKeyboard(.zero)
-    }
-
-    /// down + up reports for one character (empty if unmappable); paced by the caller
-    static func keyReports(for character: Character, adding modifiers: KeyboardModifiers = []) -> [KeyboardReport] {
-        guard let (key, mods) = mapASCII(character) else { return [] }
-        return [KeyboardReport(modifiers: mods.union(modifiers), keys: [key]), .zero]
-    }
-
-    static func keyReports(for key: Keycode, modifiers: KeyboardModifiers = []) -> [KeyboardReport] {
-        [KeyboardReport(modifiers: modifiers, keys: [key]), .zero]
-    }
-
-    @MainActor
-    func typeWord(_ text: String) async {
-        for character in text {
-            type(character)
-            try? await Task.sleep(nanoseconds: 20_000_000)
-        }
+    /// One relative wheel report and nothing else. Relative wheel input needs no
+    /// release report, and a zero written immediately after it can be coalesced
+    /// with the delta by the transport or the host — which is what made the
+    /// right-side buttons look dead.
+    func scroll(_ wheel: Int8) {
+        guard wheel != 0 else { return }
+        sendMouse(MouseReport(wheel: wheel))
     }
 
     static func clamp(_ value: CGFloat) -> Int8 {
@@ -89,39 +44,8 @@ struct HIDInput {
 }
 
 extension HIDInput {
-    #if os(macOS)
-        @MainActor
-        static func make(lowEnergy: HIDPeripheral, central: HIDCentral, classic: HIDClassicDevice, classicMode: Bool) -> HIDInput {
-            guard classicMode else { return _lowEnergy(lowEnergy, central) }
-            return HIDInput(
-                sendMouse: { classic.sendMouse($0) },
-                sendKeyboard: { classic.sendKeyboard($0) },
-                sendConsumer: { classic.sendConsumer($0) },
-                sendDigitizer: { classic.sendDigitizer($0) },
-                updateBattery: { classic.updateBatteryLevel($0) },
-                isActive: classic.isSDPPublished,
-                isConnected: classic.connectedAddress != nil,
-                connectedHostCount: classic.connectedAddress == nil ? 0 : 1,
-                activeError: classic.lastError,
-                batteryLevel: classic.batteryLevel
-            )
-        }
-    #else
-        @MainActor
-        static func make(lowEnergy: HIDPeripheral, central: HIDCentral) -> HIDInput {
-            _lowEnergy(lowEnergy, central)
-        }
-    #endif
-
-    static var unavailable: HIDInput {
-        HIDInput(
-            sendMouse: { _ in }, sendKeyboard: { _ in }, sendConsumer: { _ in }, sendDigitizer: { _ in }, updateBattery: { _ in },
-            isActive: false, isConnected: false, connectedHostCount: 0, activeError: nil, batteryLevel: 0
-        )
-    }
-
     @MainActor
-    private static func _lowEnergy(_ lowEnergy: HIDPeripheral, _ central: HIDCentral) -> HIDInput {
+    static func make(lowEnergy: HIDPeripheral, central: HIDCentral) -> HIDInput {
         HIDInput(
             sendMouse: { lowEnergy.sendMouse($0) },
             sendKeyboard: { lowEnergy.sendKeyboard($0) },
@@ -137,17 +61,17 @@ extension HIDInput {
             batteryLevel: lowEnergy.batteryLevel
         )
     }
-}
 
-private struct HIDInputKey: EnvironmentKey {
-    static var defaultValue: HIDInput { .unavailable }
+    static var unavailable: HIDInput {
+        HIDInput(
+            sendMouse: { _ in }, sendKeyboard: { _ in }, sendConsumer: { _ in }, sendDigitizer: { _ in }, updateBattery: { _ in },
+            isActive: false, isConnected: false, connectedHostCount: 0, activeError: nil, batteryLevel: 0
+        )
+    }
 }
 
 extension EnvironmentValues {
-    var hid: HIDInput {
-        get { self[HIDInputKey.self] }
-        set { self[HIDInputKey.self] = newValue }
-    }
+    @Entry var hid: HIDInput = .unavailable
 }
 
 /// Haptic feedback, modelled on the MacBook trackpad.
@@ -174,163 +98,128 @@ enum Haptics {
         case medium
         case strong
 
-        /// `.strong` is the original feel, so it is also the fallback for an
-        /// absent or unrecognised stored value.
+        /// `.medium` is the default feel for a Mac-like input surface, and also
+        /// the fallback for an absent or unrecognised stored value.
         static func from(_ setting: String?) -> Intensity {
-            Intensity(rawValue: setting ?? "") ?? .strong
+            Intensity(rawValue: setting ?? "") ?? .medium
         }
     }
 
-    #if os(iOS)
-        @MainActor private static var impact: UIImpactFeedbackGenerator?
-        /// The intensity `impact` was created with; `.strong` maps to `.rigid`, so
-        /// a stale generator would silently ignore a change to the setting.
-        @MainActor private static var impactIntensity: Intensity?
-        @MainActor private static var selection: UISelectionFeedbackGenerator?
-        @MainActor private static var lastScrollTick: CFTimeInterval = 0
-        /// Ceiling of ~25 ticks/second, so a fast flick stays crisp instead of buzzing.
-        private static let scrollTickInterval: CFTimeInterval = 0.04
-    #endif
+    @MainActor private static var impact: UIImpactFeedbackGenerator?
+    /// The intensity `impact` was created with; `.strong` maps to `.rigid`, so
+    /// a stale generator would silently ignore a change to the setting.
+    @MainActor private static var impactIntensity: Intensity?
+    @MainActor private static var selection: UISelectionFeedbackGenerator?
+    @MainActor private static var lastScrollTick: CFTimeInterval = 0
+    /// Ceiling of ~25 ticks/second, so a fast flick stays crisp instead of buzzing.
+    private static let scrollTickInterval: CFTimeInterval = 0.04
 
     /// A discrete press: a click, a key, a gesture.
     @MainActor
     static func tap(from source: Source = .trackpad) {
-        #if os(iOS)
-            guard isEnabled(source) else { return }
-            let generator = impactGenerator(for: intensity)
-            generator.impactOccurred()
-            generator.prepare()
-        #endif
+        guard isEnabled(source) else { return }
+        let generator = impactGenerator(for: intensity)
+        generator.impactOccurred()
+        generator.prepare()
     }
 
     /// A scroll detent. Rate-limited, so callers may fire it per wheel step.
     @MainActor
     static func scrollTick() {
-        #if os(iOS)
-            let defaults = UserDefaults.standard
-            guard defaults.bool(forKey: AppSettings.hapticsEnabledKey),
-                  defaults.bool(forKey: AppSettings.hapticsTrackpadKey),
-                  defaults.bool(forKey: AppSettings.hapticsScrollKey)
-            else { return }
-            let now = CACurrentMediaTime()
-            guard now - lastScrollTick >= scrollTickInterval else { return }
-            lastScrollTick = now
-            let level = intensity
-            if let damped = scrollImpactIntensity(for: level) {
-                // The selection generator has no style to soften, so the lighter
-                // levels substitute a damped impact for the bare tick.
-                let generator = impactGenerator(for: level)
-                generator.impactOccurred(intensity: damped)
-                generator.prepare()
-            } else {
-                let generator = selectionGenerator()
-                generator.selectionChanged()
-                generator.prepare()
-            }
-        #endif
+        let defaults = UserDefaults.standard
+        guard defaults.bool(forKey: AppSettings.hapticsEnabledKey),
+              defaults.bool(forKey: AppSettings.hapticsTrackpadKey),
+              defaults.bool(forKey: AppSettings.hapticsScrollKey)
+        else { return }
+        let now = CACurrentMediaTime()
+        guard now - lastScrollTick >= scrollTickInterval else { return }
+        lastScrollTick = now
+        let level = intensity
+        if let damped = scrollImpactIntensity(for: level) {
+            // The selection generator has no style to soften, so the lighter
+            // levels substitute a damped impact for the bare tick.
+            let generator = impactGenerator(for: level)
+            generator.impactOccurred(intensity: damped)
+            generator.prepare()
+        } else {
+            let generator = selectionGenerator()
+            generator.selectionChanged()
+            generator.prepare()
+        }
     }
 
     /// Spin the engine up ahead of an interaction so the first tap lands on time.
     @MainActor
     static func prepare() {
-        #if os(iOS)
-            guard UserDefaults.standard.bool(forKey: AppSettings.hapticsEnabledKey) else { return }
-            _ = impactGenerator(for: intensity)
-            _ = selectionGenerator()
-        #endif
+        guard UserDefaults.standard.bool(forKey: AppSettings.hapticsEnabledKey) else { return }
+        _ = impactGenerator(for: intensity)
+        _ = selectionGenerator()
     }
 
-    #if os(iOS)
-        @MainActor
-        private static func isEnabled(_ source: Source) -> Bool {
-            let defaults = UserDefaults.standard
-            guard defaults.bool(forKey: AppSettings.hapticsEnabledKey) else { return false }
-            switch source {
-            case .trackpad: return defaults.bool(forKey: AppSettings.hapticsTrackpadKey)
-            case .keyboard: return defaults.bool(forKey: AppSettings.hapticsKeyboardKey)
-            }
+    @MainActor
+    private static func isEnabled(_ source: Source) -> Bool {
+        let defaults = UserDefaults.standard
+        guard defaults.bool(forKey: AppSettings.hapticsEnabledKey) else { return false }
+        switch source {
+        case .trackpad: return defaults.bool(forKey: AppSettings.hapticsTrackpadKey)
+        case .keyboard: return defaults.bool(forKey: AppSettings.hapticsKeyboardKey)
         }
-
-        /// The current intensity, read straight from `UserDefaults` so a change in
-        /// Settings takes effect immediately.
-        @MainActor
-        private static var intensity: Intensity {
-            Intensity.from(UserDefaults.standard.string(forKey: AppSettings.hapticsIntensityKey))
-        }
-
-        /// Impact style per level: `.rigid` is Apple's "crisp, rigid" description,
-        /// the original feel and so the mapping for `.strong`.
-        @MainActor
-        private static func impactStyle(for level: Intensity) -> UIImpactFeedbackGenerator.FeedbackStyle {
-            switch level {
-            case .light: .light
-            case .medium: .medium
-            case .strong: .rigid
-            }
-        }
-
-        /// Strength of the damped impact that stands in for a scroll tick at the
-        /// softer levels. `nil` means "use the selection generator", which is the
-        /// original tick and therefore the mapping for `.strong` — the selection
-        /// generator has no style or intensity of its own to soften, so the softer
-        /// levels substitute a reduced-intensity impact at the same level's style.
-        @MainActor
-        private static func scrollImpactIntensity(for level: Intensity) -> CGFloat? {
-            switch level {
-            case .light: 0.25
-            case .medium: 0.5
-            case .strong: nil
-            }
-        }
-
-        /// `UIImpactFeedbackGenerator` fixes its style at init, so a cached
-        /// generator built for a different level is discarded rather than reused.
-        @MainActor
-        private static func impactGenerator(for level: Intensity) -> UIImpactFeedbackGenerator {
-            if let impact, impactIntensity == level {
-                return impact
-            }
-            let generator = UIImpactFeedbackGenerator(style: impactStyle(for: level))
-            generator.prepare()
-            impact = generator
-            impactIntensity = level
-            return generator
-        }
-
-        @MainActor
-        private static func selectionGenerator() -> UISelectionFeedbackGenerator {
-            if let selection {
-                return selection
-            }
-            let generator = UISelectionFeedbackGenerator()
-            generator.prepare()
-            selection = generator
-            return generator
-        }
-
-    #endif
-}
-
-/// US-layout ASCII to keycode/modifier mapping
-private func mapASCII(_ character: Character) -> (Keycode, KeyboardModifiers)? {
-    if let a = character.asciiValue {
-        if a >= 0x61, a <= 0x7A, let key = Keycode(rawValue: 0x04 + (a - 0x61)) { return (key, []) } // a..z
-        if a >= 0x41, a <= 0x5A, let key = Keycode(rawValue: 0x04 + (a - 0x41)) { return (key, .leftShift) } // A..Z
     }
-    return _symbolKeys[character]
-}
 
-private let _shift: KeyboardModifiers = .leftShift
-private let _symbolKeys: [Character: (Keycode, KeyboardModifiers)] = [
-    "1": (.digit1, []), "2": (.digit2, []), "3": (.digit3, []), "4": (.digit4, []), "5": (.digit5, []),
-    "6": (.digit6, []), "7": (.digit7, []), "8": (.digit8, []), "9": (.digit9, []), "0": (.digit0, []),
-    "!": (.digit1, _shift), "@": (.digit2, _shift), "#": (.digit3, _shift), "$": (.digit4, _shift), "%": (.digit5, _shift),
-    "^": (.digit6, _shift), "&": (.digit7, _shift), "*": (.digit8, _shift), "(": (.digit9, _shift), ")": (.digit0, _shift),
-    " ": (.space, []), "\n": (.return, []), "\r": (.return, []), "\t": (.tab, []),
-    "-": (.minus, []), "_": (.minus, _shift), "=": (.equal, []), "+": (.equal, _shift),
-    "[": (.leftBracket, []), "{": (.leftBracket, _shift), "]": (.rightBracket, []), "}": (.rightBracket, _shift),
-    "\\": (.backslash, []), "|": (.backslash, _shift), ";": (.semicolon, []), ":": (.semicolon, _shift),
-    "'": (.quote, []), "\"": (.quote, _shift), "`": (.grave, []), "~": (.grave, _shift),
-    ",": (.comma, []), "<": (.comma, _shift), ".": (.period, []), ">": (.period, _shift),
-    "/": (.slash, []), "?": (.slash, _shift)
-]
+    /// The current intensity, read straight from `UserDefaults` so a change in
+    /// Settings takes effect immediately.
+    @MainActor
+    private static var intensity: Intensity {
+        Intensity.from(UserDefaults.standard.string(forKey: AppSettings.hapticsIntensityKey))
+    }
+
+    /// Impact style per level: `.rigid` is Apple's "crisp, rigid" description,
+    /// the mapping for `.strong`.
+    @MainActor
+    private static func impactStyle(for level: Intensity) -> UIImpactFeedbackGenerator.FeedbackStyle {
+        switch level {
+        case .light: .light
+        case .medium: .medium
+        case .strong: .rigid
+        }
+    }
+
+    /// Strength of the damped impact that stands in for a scroll tick at the
+    /// softer levels. `nil` means "use the selection generator", which is the
+    /// original tick and therefore the mapping for `.strong` — the selection
+    /// generator has no style or intensity of its own to soften, so the softer
+    /// levels substitute a reduced-intensity impact at the same level's style.
+    @MainActor
+    private static func scrollImpactIntensity(for level: Intensity) -> CGFloat? {
+        switch level {
+        case .light: 0.25
+        case .medium: 0.5
+        case .strong: nil
+        }
+    }
+
+    /// `UIImpactFeedbackGenerator` fixes its style at init, so a cached
+    /// generator built for a different level is discarded rather than reused.
+    @MainActor
+    private static func impactGenerator(for level: Intensity) -> UIImpactFeedbackGenerator {
+        if let impact, impactIntensity == level {
+            return impact
+        }
+        let generator = UIImpactFeedbackGenerator(style: impactStyle(for: level))
+        generator.prepare()
+        impact = generator
+        impactIntensity = level
+        return generator
+    }
+
+    @MainActor
+    private static func selectionGenerator() -> UISelectionFeedbackGenerator {
+        if let selection {
+            return selection
+        }
+        let generator = UISelectionFeedbackGenerator()
+        generator.prepare()
+        selection = generator
+        return generator
+    }
+}

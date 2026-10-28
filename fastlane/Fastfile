@@ -30,24 +30,6 @@ platform :ios do
   end
 end
 
-platform :mac do
-  desc "Build release for macOS App Store"
-  lane :release do
-    match(type: "appstore", platform: "macos", additional_cert_types: ["mac_installer_distribution"], readonly: true)
-    profile = configure_signing
-    build_mac_app(
-      project: PROJECT,
-      scheme: SCHEME,
-      sdk: "macosx",
-      destination: "generic/platform=macOS",
-      export_method: "app-store",
-      output_directory: "build",
-      installer_cert_name: "3rd Party Mac Developer Installer",
-      export_options: { provisioningProfiles: { APP_ID => profile } }
-    )
-  end
-end
-
 private_lane :configure_signing do
   key  = ENV.keys.find { |k| k.start_with?("sigh_#{APP_ID}_appstore") && k.end_with?("_profile-name") }
   name = ENV.fetch(key)

@@ -1,12 +1,9 @@
 import SwiftUI
 
-/// Leftover height below the key rows under which a trackpad would be too cramped to use.
-private let trackpadMinimumHeight: CGFloat = 80
-/// Keeps the embedded touch surface clear of the home indicator and the swipe-up gesture.
-private let trackpadBottomInset: CGFloat = 8
-/// Height the keys settle on once there is room for it. Anything deeper than this below
-/// the rows is left to the trackpad, so the keys stop growing here.
-private let maximumKeyHeight: CGFloat = 52
+/// Height the keys settle on once there is room for it. The keyboard page has no
+/// embedded trackpad any more, so anything deeper than this is left as margin
+/// above and below the rows instead of stretching every cap.
+private let maximumKeyHeight: CGFloat = 64
 /// Shortest a key gets before the keyboard stops scaling down.
 private let minimumKeyHeight: CGFloat = 28
 /// How far above a cap its press bubble floats, how much taller than the cap the bubble
@@ -17,21 +14,22 @@ private let bubbleCornerRadius: CGFloat = 8
 private let bubbleLabelScale: CGFloat = 1.3
 
 struct FullKeyboardView: View {
+    let releases: InputReleaseCoordinator
+
     @Environment(\.hid) private var hid
-    @Environment(\.scenePhase) private var scenePhase
     @State private var mods: KeyboardModifiers = []
     @State private var isCapsLockOn = false
-    /// Keys currently down, so a release reports the union of what is left pressed
-    /// instead of clearing the whole keyboard.
-    @State private var heldKeys: Set<Keycode> = []
-    /// Fingers on the key surface, shared with every per-key touch layer. One instance for
-    /// the life of the page, held in `@StateObject` rather than `@State`: `@State` would
-    /// keep the object alive just as well, but it does not subscribe to it, so the
-    /// `@Published` count would reach nobody and the `onChange` below would stay dead code —
-    /// measured, not assumed: a `@State`-held `ObservableObject` re-evaluated its body zero
-    /// times as its value moved, while the same object in `@StateObject` re-evaluated it once
-    /// per change. `@StateObject` subscribes, so `value` is what drives the safety net.
+    /// Keys currently down, reference counted so two fingers on one cap are one
+    /// logical press and the key is released only when the last finger leaves.
+    @State private var keys = KeyPressTracker()
+    /// Fingers on the key surface, shared with every per-key touch layer.
     @StateObject private var surfaceTouches = KeyTouchCount()
+    @State private var releaseToken: InputReleaseCoordinator.Token?
+
+    @MainActor
+    init(releases: InputReleaseCoordinator) {
+        self.releases = releases
+    }
 
     var body: some View {
         // The insets have to be read from a reader ABOVE the `ignoresSafeArea` below, not
@@ -72,94 +70,46 @@ struct FullKeyboardView: View {
             .ignoresSafeArea(.container, edges: .horizontal)
         }
         // last line of defence: nothing is touching the surface, so nothing may stay held.
-        // This fires now that `KeyTouchCount` publishes its value; it can arrive at the same
-        // moment as the surface layer's own report in `KeyCapTouchSurface`, and releasing
-        // twice is harmless — `releaseAllKeys` leaves an empty keyboard alone, so the second
-        // call is a no-op rather than a second clear.
+        // This fires now that `KeyTouchCount` publishes its value. Releasing twice is
+        // harmless: the tracker is already empty, so the second call changes nothing.
         .onChange(of: surfaceTouches.value) { count in
             if count == 0 {
-                releaseAllKeys()
+                releaseEverything()
             }
         }
-        .onDisappear { releaseAllKeys() }
-        .onChange(of: scenePhase) { phase in
-            if phase != .active {
-                releaseAllKeys()
+        .onAppear {
+            releaseToken = releases.register { releaseEverything() }
+        }
+        .onDisappear {
+            if let releaseToken {
+                releases.unregister(releaseToken)
+                self.releaseToken = nil
             }
+            releaseEverything()
         }
     }
 
     // MARK: - Keyboard
 
-    /// One six-row layout in both orientations, with a side trackpad when landscape
-    /// leaves enough width for both surfaces to remain usable.
-    ///
-    /// The rows are narrower in portrait than in landscape, so the keys are
-    /// necessarily smaller there; they scale to fill the width exactly rather than
-    /// scrolling. A scrolling surface was rejected on purpose: a scroll view delays
-    /// touch delivery and its pan recogniser can cancel a touch that started on a
-    /// key, which is the same class of interruption that used to leave keys latched.
-    @ViewBuilder
+    /// One six-row layout in both orientations. The rows scale to fill the width
+    /// and never scroll: a scroll surface delays touch delivery and its pan
+    /// recogniser can cancel a touch that started on a key.
     private func keyboard(size: CGSize) -> some View {
-        switch FullKeyboardLayoutPolicy.presentation(in: size) {
-        case .singleColumn:
-            keyboardSurface(
-                size: size,
-                isLandscape: size.width > size.height,
-                fillsHeight: false
-            )
-        case let .split(sidePanelWidth):
-            HStack(spacing: FullKeyboardLayoutPolicy.columnSpacing) {
-                keyboardSurface(
-                    size: CGSize(
-                        width: size.width - sidePanelWidth - FullKeyboardLayoutPolicy.columnSpacing,
-                        height: size.height
-                    ),
-                    isLandscape: true,
-                    fillsHeight: true
-                )
-                TrackpadPanel(hid: hid)
-                    .frame(width: sidePanelWidth, height: size.height)
-            }
-            .frame(width: size.width, height: size.height)
-        }
-    }
-
-    private func keyboardSurface(
-        size: CGSize,
-        isLandscape: Bool,
-        fillsHeight: Bool
-    ) -> some View {
         let gap = FullKeyboardLayoutPolicy.keyGap
-        let totalRows: CGFloat = 6
+        let totalRows = CGFloat(6)
         let availableHeight = size.height - (totalRows - 1) * gap
         let idealKeyHeight = availableHeight / totalRows
-        // Keys stop at `maximumKeyHeight` so the trackpad can have the rest, but a strip
-        // left over that is too shallow for the trackpad would just be dead space above
-        // the home indicator; the keys take it back instead. This is where the height
-        // freed by the removed title bar ends up on a device with no room for a trackpad.
-        let leftoverForTrackpad = availableHeight - totalRows * maximumKeyHeight
-        let keyHeight: CGFloat = if fillsHeight {
-            max(minimumKeyHeight, idealKeyHeight)
-        } else {
-            max(
-                minimumKeyHeight,
-                idealKeyHeight > maximumKeyHeight && leftoverForTrackpad < trackpadMinimumHeight
-                    ? idealKeyHeight
-                    : min(maximumKeyHeight, idealKeyHeight)
-            )
-        }
+        let keyHeight = min(max(idealKeyHeight, minimumKeyHeight), maximumKeyHeight)
 
         return keyboardLayout(
             rows: [row0, row1, row2, row3, row4, row5],
             size: size,
             gap: gap,
             height: keyHeight,
-            isCompact: !isLandscape
+            isCompact: size.width < size.height
         )
     }
 
-    /// Keys pinned to the top; a trackpad fills the leftover below when there is room for one.
     private func keyboardLayout(
         rows: [[FullKeyCap]],
         size: CGSize,
@@ -168,9 +118,8 @@ struct FullKeyboardView: View {
         isCompact: Bool
     ) -> some View {
         let rowsHeight = CGFloat(rows.count) * height + CGFloat(max(rows.count - 1, 0)) * gap
-        let leftover = size.height - rowsHeight
 
-        return KeyCapTouchSurface(touches: surfaceTouches, onAllTouchesEnded: releaseAllKeys) {
+        return KeyCapTouchSurface(touches: surfaceTouches, onAllTouchesEnded: releaseEverything) {
             VStack(spacing: gap) {
                 ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, keys in
                     keyRow(
@@ -182,13 +131,9 @@ struct FullKeyboardView: View {
                         isCompact: isCompact
                     )
                 }
-                if leftover >= trackpadMinimumHeight {
-                    TrackpadPanel(hid: hid, showsControls: false)
-                        .frame(maxHeight: .infinity)
-                        .padding(.bottom, trackpadBottomInset)
-                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .frame(width: size.width, height: rowsHeight)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
         // The press bubbles are drawn over the whole keyboard instead of inside the row
         // that owns the cap: a row clips to its own bounds, and the top row sits against
@@ -276,36 +221,57 @@ struct FullKeyboardView: View {
     }
 
     private func keyDown(_ code: Keycode) {
-        heldKeys.insert(code)
+        guard keys.press(code) else { return }
         sendHeldKeys()
     }
 
-    /// Releases `code` while leaving any other held key down.
+    /// Releases one finger from `code`; the key itself is released only when the
+    /// last finger leaves, which is what the tracker's count decides.
     private func keyUp(_ code: Keycode) {
-        heldKeys.remove(code)
+        guard keys.release(code) else { return }
         sendHeldKeys()
     }
 
-    /// Drops every held key and clears the host, e.g. when the page goes away or the app backgrounds.
-    private func releaseAllKeys() {
-        guard !heldKeys.isEmpty else { return }
-        heldKeys.removeAll()
-        hid.keyUp()
+    /// Drops every held key and modifier and clears the host. Safe to call
+    /// repeatedly: with nothing held it sends nothing, so a second interruption
+    /// cannot produce a second transition.
+    private func releaseEverything() {
+        let hadKeyboardState = !keys.isEmpty || !mods.isEmpty
+        keys.removeAll()
+        mods.removeAll()
+        guard hadKeyboardState else { return }
+        hid.sendKeyboard(.zero)
     }
 
     private func sendHeldKeys() {
         var effectiveMods = mods
         if isCapsLockOn {
-            for key in heldKeys where isLetter(key) {
+            for key in keys.heldKeys where isLetter(key) {
                 effectiveMods.insert(.leftShift)
             }
         }
-        hid.sendKeyboard(KeyboardReport(modifiers: effectiveMods, keys: Array(heldKeys).sorted { $0.rawValue < $1.rawValue }))
+        hid.sendKeyboard(
+            KeyboardReport(
+                modifiers: effectiveMods,
+                keys: keys.heldKeys.sorted { $0.rawValue < $1.rawValue }
+            )
+        )
     }
 
+    /// Caps Lock stays a toggle, but the tap is sent with the current held keys
+    /// folded in and then followed by the held-key report, so a key that was down
+    /// when Caps was tapped is not dropped by the tap's release report.
     private func toggleCapsLock() {
         isCapsLockOn.toggle()
-        hid.tap(.capsLock, modifiers: mods)
+        var reportKeys = keys.heldKeys
+        reportKeys.insert(.capsLock)
+        hid.sendKeyboard(
+            KeyboardReport(
+                modifiers: mods,
+                keys: reportKeys.sorted { $0.rawValue < $1.rawValue }
+            )
+        )
+        sendHeldKeys()
     }
 
     private func toggleMod(_ mod: KeyboardModifiers) {
@@ -313,6 +279,9 @@ struct FullKeyboardView: View {
             mods.subtract(mod)
         } else {
             mods.insert(mod)
+        }
+        if !keys.isEmpty {
+            sendHeldKeys()
         }
     }
 
@@ -382,7 +351,7 @@ private struct KeyPressBubbleOverlay: View {
             }
         }
         // decoration only: a bubble must never swallow the touch that is holding the
-        // key down, and on macOS it must not take the cap's drag gesture either
+        // key down
         .allowsHitTesting(false)
     }
 
@@ -438,13 +407,11 @@ private struct FullKeyCapButton: View {
 
     var body: some View {
         ZStack {
-            #if os(iOS)
-                KeyCapTouchView(
-                    touches: surfaceTouches,
-                    onFirstTouch: press,
-                    onLastTouch: release
-                )
-            #endif
+            KeyCapTouchView(
+                touches: surfaceTouches,
+                onFirstTouch: press,
+                onLastTouch: release
+            )
             RoundedRectangle(cornerRadius: 6)
                 .fill(isArmed ? Color.accentColor : appTheme.controlFill)
                 .allowsHitTesting(false)
@@ -473,15 +440,6 @@ private struct FullKeyCapButton: View {
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(key.accessibility)
-        #if !os(iOS)
-            // macOS keeps the previous press/release gesture: this page only sees touch
-            // input on iOS, where the layer inside the ZStack replaces it.
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in press() }
-                    .onEnded { _ in release() }
-            )
-        #endif
     }
 
     private func press() {
@@ -584,6 +542,6 @@ private struct KeyCapLabel: View {
 
 #if DEBUG
     #Preview {
-        FullKeyboardView()
+        FullKeyboardView(releases: InputReleaseCoordinator())
     }
 #endif

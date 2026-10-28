@@ -11,35 +11,24 @@ struct SettingsView: View {
     @AppStorage(AppSettings.scrollSensitivityKey) private var scrollSensitivity = AppSettings.defaultScrollSensitivity
     @AppStorage(AppSettings.developerModeKey) private var developerMode = false
     @AppStorage(AppSettings.useServiceChangedKey) private var forceServiceChanged = true
-    @AppStorage(AppSettings.liveTypingKey) private var liveTyping = true
     @AppStorage(AppSettings.hasSeenWelcomeKey) private var hasSeenWelcome = false
     @AppStorage(AppSettings.hapticsEnabledKey) private var hapticsEnabled = true
     @AppStorage(AppSettings.hapticsTrackpadKey) private var hapticsTrackpad = true
     @AppStorage(AppSettings.hapticsKeyboardKey) private var hapticsKeyboard = true
     @AppStorage(AppSettings.hapticsScrollKey) private var hapticsScroll = true
-    @AppStorage(AppSettings.hapticsIntensityKey) private var hapticsIntensity = Haptics.Intensity.strong.rawValue
-    #if os(iOS)
-        /// off by default: advertising is what wakes paired hosts, so it waits to be asked for
-        @AppStorage(AppSettings.autoAdvertiseKey) private var autoAdvertise = false
-    #endif
+    @AppStorage(AppSettings.hapticsIntensityKey) private var hapticsIntensity = Haptics.Intensity.medium.rawValue
+    /// off by default: advertising is what wakes paired hosts, so it waits to be asked for
+    @AppStorage(AppSettings.autoAdvertiseKey) private var autoAdvertise = false
 
     private var selectedTheme: AppTheme {
         AppTheme(storedValue: selectedThemeRaw)
     }
 
     var body: some View {
-        #if os(macOS)
-            NavigationStack {
-                form
-                    .formStyle(.grouped)
-                    .navigationTitle(L10n.Tab.settings)
-            }
-        #else
-            NavigationView {
-                form.navigationTitle(L10n.Tab.settings)
-            }
-            .navigationViewStyle(.stack)
-        #endif
+        NavigationView {
+            form.navigationTitle(L10n.Tab.settings)
+        }
+        .navigationViewStyle(.stack)
     }
 
     private var form: some View {
@@ -58,15 +47,13 @@ struct SettingsView: View {
                     Text(L10n.Settings.oledHint)
                 }
             }
-            #if os(iOS)
-                Section {
-                    Toggle(L10n.Settings.fullScreenKeyboard, isOn: $fullscreenKeyboard)
-                } header: {
-                    Text(L10n.Settings.keyboard)
-                } footer: {
-                    Text(L10n.Settings.fullScreenKeyboardHint)
-                }
-            #endif
+            Section {
+                Toggle(L10n.Settings.fullScreenKeyboard, isOn: $fullscreenKeyboard)
+            } header: {
+                Text(L10n.Settings.keyboard)
+            } footer: {
+                Text(L10n.Settings.fullScreenKeyboardHint)
+            }
             Section(header: Text(L10n.Settings.trackpad)) {
                 sensitivityRow(L10n.Settings.trackingSpeed, value: $touchpadSensitivity, range: AppSettings.pointerSensitivityRange)
                 sensitivityRow(L10n.Settings.scrollSpeed, value: $scrollSensitivity, range: AppSettings.scrollSensitivityRange)
@@ -76,36 +63,34 @@ struct SettingsView: View {
                     Label(L10n.Gesture.sectionTitle, systemImage: "hand.draw")
                 }
             }
-            #if os(iOS)
-                Section(header: Text(L10n.Settings.haptics), footer: Text(L10n.Settings.hapticsHint)) {
-                    Toggle(L10n.Settings.hapticsEnabled, isOn: $hapticsEnabled)
-                    if hapticsEnabled {
-                        Picker(L10n.Settings.hapticsIntensity, selection: $hapticsIntensity) {
-                            Text(L10n.Settings.hapticsIntensityLight).tag(Haptics.Intensity.light.rawValue)
-                            Text(L10n.Settings.hapticsIntensityMedium).tag(Haptics.Intensity.medium.rawValue)
-                            Text(L10n.Settings.hapticsIntensityStrong).tag(Haptics.Intensity.strong.rawValue)
-                        }
-                        .pickerStyle(.segmented)
-                        Toggle(L10n.Settings.hapticsTrackpad, isOn: $hapticsTrackpad)
-                        Toggle(L10n.Settings.hapticsScroll, isOn: $hapticsScroll)
-                            .disabled(!hapticsTrackpad)
-                        Toggle(L10n.Settings.hapticsKeyboard, isOn: $hapticsKeyboard)
+            Section(header: Text(L10n.Settings.haptics), footer: Text(L10n.Settings.hapticsHint)) {
+                Toggle(L10n.Settings.hapticsEnabled, isOn: $hapticsEnabled)
+                if hapticsEnabled {
+                    Picker(L10n.Settings.hapticsIntensity, selection: $hapticsIntensity) {
+                        Text(L10n.Settings.hapticsIntensityLight).tag(Haptics.Intensity.light.rawValue)
+                        Text(L10n.Settings.hapticsIntensityMedium).tag(Haptics.Intensity.medium.rawValue)
+                        Text(L10n.Settings.hapticsIntensityStrong).tag(Haptics.Intensity.strong.rawValue)
                     }
+                    .pickerStyle(.segmented)
+                    Toggle(L10n.Settings.hapticsTrackpad, isOn: $hapticsTrackpad)
+                    Toggle(L10n.Settings.hapticsScroll, isOn: $hapticsScroll)
+                        .disabled(!hapticsTrackpad)
+                    Toggle(L10n.Settings.hapticsKeyboard, isOn: $hapticsKeyboard)
                 }
-                .onChange(of: hapticsEnabled) { enabled in
-                    if enabled {
-                        Haptics.prepare()
-                    }
-                }
-                .onChange(of: hapticsIntensity) { _ in
-                    // The new level needs a fresh generator, so warm it up here
-                    // rather than paying the spin-up cost on the first tap.
+            }
+            .onChange(of: hapticsEnabled) { enabled in
+                if enabled {
                     Haptics.prepare()
                 }
-                Section(header: Text(L10n.Settings.connection), footer: Text(L10n.Settings.autoAdvertiseHint)) {
-                    Toggle(L10n.Settings.autoAdvertise, isOn: $autoAdvertise)
-                }
-            #endif
+            }
+            .onChange(of: hapticsIntensity) { _ in
+                // The new level needs a fresh generator, so warm it up here
+                // rather than paying the spin-up cost on the first tap.
+                Haptics.prepare()
+            }
+            Section(header: Text(L10n.Settings.connection), footer: Text(L10n.Settings.autoAdvertiseHint)) {
+                Toggle(L10n.Settings.autoAdvertise, isOn: $autoAdvertise)
+            }
             Section(footer: Text(L10n.Settings.forceServiceChangedHint)) {
                 Toggle(L10n.Settings.forceServiceChanged, isOn: $forceServiceChanged)
                     .onChange(of: forceServiceChanged) {
@@ -115,13 +100,6 @@ struct SettingsView: View {
                     }
             }
             Section(header: Text(L10n.Settings.advanced)) {
-                // The classic keyboard's live-typing mode. It fits none of the other
-                // groups — appearance, trackpad, haptics and connection are all about
-                // a different surface — and this is the one section that is not
-                // itself wrapped in `#if os(iOS)`, so the setting stays reachable on
-                // macOS, where the classic keyboard also consumes it. Read back by
-                // ClassicKeyboardView through this same AppSettings.liveTypingKey.
-                Toggle(L10n.Keyboard.liveTyping, isOn: $liveTyping)
                 Toggle(L10n.Settings.developerMode, isOn: $developerMode)
                 Link(destination: AppSettings.repoURL) {
                     Label(L10n.Settings.sourceCode, systemImage: "chevron.left.forwardslash.chevron.right")
@@ -188,17 +166,9 @@ struct SettingsView: View {
 
 #if DEBUG
     #Preview {
-        #if os(iOS)
-            SettingsView()
-                .environmentObject(HIDPeripheral())
-                .environmentObject(HIDCentral())
-                .environmentObject(DeviceNameStore())
-        #else
-            SettingsView()
-                .environmentObject(HIDPeripheral())
-                .environmentObject(HIDCentral())
-                .environmentObject(DeviceNameStore())
-                .environmentObject(HIDClassicDevice())
-        #endif
+        SettingsView()
+            .environmentObject(HIDPeripheral())
+            .environmentObject(HIDCentral())
+            .environmentObject(DeviceNameStore())
     }
 #endif

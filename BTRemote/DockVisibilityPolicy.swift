@@ -3,15 +3,13 @@ enum DockVisibilityPolicy {
         hidesDockInLandscape: Bool,
         isLandscape: Bool,
         selectedTab: AppTab,
-        remoteMode: RemoteMode,
-        keyboardPageRawValue: Int
+        inputPageRawValue: Int
     ) -> Bool {
         guard hidesDockInLandscape else { return true }
         let isLandscapeCombo =
             isLandscape
-                && selectedTab == .remote
-                && remoteMode == .keyboard
-                && keyboardPageRawValue == KeyboardPage.fullKeyboard.rawValue
+                && selectedTab == .input
+                && inputPageRawValue == InputPage.keyboard.rawValue
         return !isLandscapeCombo
     }
 }

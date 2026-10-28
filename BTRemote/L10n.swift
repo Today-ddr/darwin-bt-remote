@@ -9,24 +9,28 @@ enum L10n {
     }
 
     enum Tab {
-        static var remote: LocalizedStringKey {
-            "tab.remote"
+        static var setup: LocalizedStringKey {
+            "tab.setup"
         }
 
-        static var keyboard: LocalizedStringKey {
-            "tab.keyboard"
+        static var input: LocalizedStringKey {
+            "tab.input"
         }
 
         static var settings: LocalizedStringKey {
             "tab.settings"
         }
-
-        static var setup: LocalizedStringKey {
-            "tab.setup"
-        }
     }
 
-    enum Remote {
+    enum Input {
+        static var keyboard: LocalizedStringKey {
+            "input.keyboard"
+        }
+
+        static var trackpad: LocalizedStringKey {
+            "input.trackpad"
+        }
+
         static var notConnectedTitle: LocalizedStringKey {
             "remote.not_connected_title"
         }
@@ -37,58 +41,6 @@ enum L10n {
 
         static var openSetup: LocalizedStringKey {
             "remote.open_setup"
-        }
-
-        static var mode: LocalizedStringKey {
-            "remote.mode"
-        }
-
-        static var back: LocalizedStringKey {
-            "remote.back"
-        }
-
-        static var home: LocalizedStringKey {
-            "remote.home"
-        }
-
-        static var menu: LocalizedStringKey {
-            "remote.menu"
-        }
-
-        static var power: LocalizedStringKey {
-            "remote.power"
-        }
-
-        static var channelUp: LocalizedStringKey {
-            "remote.channel_up"
-        }
-
-        static var channelDown: LocalizedStringKey {
-            "remote.channel_down"
-        }
-
-        static var closedCaptions: LocalizedStringKey {
-            "remote.closed_captions"
-        }
-
-        static var up: LocalizedStringKey {
-            "remote.up"
-        }
-
-        static var down: LocalizedStringKey {
-            "remote.down"
-        }
-
-        static var left: LocalizedStringKey {
-            "remote.left"
-        }
-
-        static var right: LocalizedStringKey {
-            "remote.right"
-        }
-
-        static var select: LocalizedStringKey {
-            "remote.select"
         }
     }
 
@@ -185,10 +137,6 @@ enum L10n {
 
         static var done: LocalizedStringKey {
             "action.done"
-        }
-
-        static var settings: LocalizedStringKey {
-            "action.settings"
         }
     }
 
@@ -306,32 +254,8 @@ enum L10n {
 
 extension L10n {
     enum Keyboard {
-        static var prompt: LocalizedStringKey {
-            "keyboard.prompt"
-        }
-
-        static var clear: LocalizedStringKey {
-            "keyboard.clear"
-        }
-
-        static var send: LocalizedStringKey {
-            "keyboard.send"
-        }
-
-        static var liveTyping: LocalizedStringKey {
-            "keyboard.live_typing"
-        }
-
-        static var done: LocalizedStringKey {
-            "keyboard.done"
-        }
-
         static var esc: LocalizedStringKey {
             "keyboard.esc"
-        }
-
-        static var arrows: LocalizedStringKey {
-            "keyboard.arrows"
         }
 
         static var tab: LocalizedStringKey {
@@ -370,18 +294,6 @@ extension L10n {
             "keyboard.meta"
         }
 
-        static var altGr: LocalizedStringKey {
-            "keyboard.alt_gr"
-        }
-
-        static var printScreen: LocalizedStringKey {
-            "keyboard.print_screen"
-        }
-
-        static var toggleOnscreenKeyboard: LocalizedStringKey {
-            "keyboard.toggle_onscreen_keyboard"
-        }
-
         static var backspace: LocalizedStringKey {
             "keyboard.backspace"
         }
@@ -394,24 +306,8 @@ extension L10n {
             "keyboard.space"
         }
 
-        static var deleteForward: LocalizedStringKey {
-            "keyboard.delete_forward"
-        }
-
         static var capsLock: LocalizedStringKey {
             "keyboard.caps_lock"
-        }
-
-        static var fullKeyboard: LocalizedStringKey {
-            "keyboard.full_keyboard"
-        }
-
-        static var trackpad: LocalizedStringKey {
-            "keyboard.trackpad"
-        }
-
-        static var classic: LocalizedStringKey {
-            "keyboard.classic"
         }
     }
 
@@ -419,99 +315,135 @@ extension L10n {
         static var sectionTitle: LocalizedStringKey {
             "gesture.section_title"
         }
+
         static var doubleTapDrag: LocalizedStringKey {
             "gesture.double_tap_drag"
         }
-        static var doubleTapDragHint: LocalizedStringKey {
-            "gesture.double_tap_drag_hint"
+
+        static var longPressDrag: LocalizedStringKey {
+            "gesture.long_press_drag"
         }
+
+        static var longPressDragHint: LocalizedStringKey {
+            "gesture.long_press_drag_hint"
+        }
+
         static var invertScroll: LocalizedStringKey {
             "gesture.invert_scroll"
         }
+
         static var invertScrollHint: LocalizedStringKey {
             "gesture.invert_scroll_hint"
         }
+
         static var mappingTitle: LocalizedStringKey {
             "gesture.mapping_title"
         }
+
         static var pinchToZoom: LocalizedStringKey {
             "gesture.pinch_to_zoom"
         }
+
         static var rotationGesture: LocalizedStringKey {
             "gesture.rotation"
         }
+
         static var fourFingerSectionTitle: LocalizedStringKey {
             "gesture.four_finger_section_title"
         }
+
         static var fourFingerSwipeUp: LocalizedStringKey {
             "gesture.four_finger_swipe_up"
         }
+
         static var fourFingerSwipeDown: LocalizedStringKey {
             "gesture.four_finger_swipe_down"
         }
+
         static var fourFingerSwipeLeft: LocalizedStringKey {
             "gesture.four_finger_swipe_left"
         }
+
         static var fourFingerSwipeRight: LocalizedStringKey {
             "gesture.four_finger_swipe_right"
         }
+
         static var fourFingerTap: LocalizedStringKey {
             "gesture.four_finger_tap"
         }
+
         static var threeFingerSwipeUp: LocalizedStringKey {
             "gesture.three_finger_swipe_up"
         }
+
         static var threeFingerSwipeDown: LocalizedStringKey {
             "gesture.three_finger_swipe_down"
         }
+
         static var threeFingerSwipeLeft: LocalizedStringKey {
             "gesture.three_finger_swipe_left"
         }
+
         static var threeFingerSwipeRight: LocalizedStringKey {
             "gesture.three_finger_swipe_right"
         }
+
         static var threeFingerTap: LocalizedStringKey {
             "gesture.three_finger_tap"
         }
+
         static var actionNone: LocalizedStringKey {
             "gesture.action_none"
         }
+
         static var actionAppSwitcher: LocalizedStringKey {
             "gesture.action_app_switcher"
         }
+
         static var actionHome: LocalizedStringKey {
             "gesture.action_home"
         }
+
         static var actionDock: LocalizedStringKey {
             "gesture.action_dock"
         }
+
         static var actionPreviousApp: LocalizedStringKey {
             "gesture.action_previous_app"
         }
+
         static var actionNextApp: LocalizedStringKey {
             "gesture.action_next_app"
         }
+
         static var actionSpotlight: LocalizedStringKey {
             "gesture.action_spotlight"
         }
+
         static var actionControlCenter: LocalizedStringKey {
             "gesture.action_control_center"
         }
+
         static var actionNotificationCenter: LocalizedStringKey {
             "gesture.action_notification_center"
         }
+
         static var actionScreenshot: LocalizedStringKey {
             "gesture.action_screenshot"
         }
+
         static var actionMiddleClick: LocalizedStringKey {
             "gesture.action_middle_click"
         }
+
         static var actionZoom: LocalizedStringKey {
             "gesture.action_zoom"
         }
+
         static var actionRotateLeft: LocalizedStringKey {
             "gesture.action_rotate_left"
         }
+
         static var actionRotateRight: LocalizedStringKey {
             "gesture.action_rotate_right"
         }
@@ -533,51 +465,11 @@ extension L10n {
         static var iosNoDevice: LocalizedStringKey {
             "direct_input.ios_no_device"
         }
-
-        static var releaseHintString: String {
-            String(localized: "direct_input.release_hint")
-        }
-
-        static var captureFailedString: String {
-            String(localized: "direct_input.capture_failed")
-        }
-
-        static var permissionTitle: LocalizedStringKey {
-            "direct_input.permission_title"
-        }
-
-        static var permissionMessage: LocalizedStringKey {
-            "direct_input.permission_message"
-        }
-
-        static var openSettings: LocalizedStringKey {
-            "direct_input.open_settings"
-        }
-
-        static var enable: LocalizedStringKey {
-            "direct_input.enable"
-        }
-
-        static var connectedPromptTitle: LocalizedStringKey {
-            "direct_input.connected_prompt_title"
-        }
-
-        static var connectedPromptMessage: LocalizedStringKey {
-            "direct_input.connected_prompt_message"
-        }
     }
 
     enum Mouse {
-        static var leftButton: LocalizedStringKey {
-            "mouse.button.left"
-        }
-
         static var middleButton: LocalizedStringKey {
             "mouse.button.middle"
-        }
-
-        static var rightButton: LocalizedStringKey {
-            "mouse.button.right"
         }
 
         static var wheelUp: LocalizedStringKey {
@@ -586,32 +478,6 @@ extension L10n {
 
         static var wheelDown: LocalizedStringKey {
             "mouse.wheel.down"
-        }
-    }
-
-    enum Media {
-        static var playPause: LocalizedStringKey {
-            "media.play_pause"
-        }
-
-        static var rewind: LocalizedStringKey {
-            "media.rewind"
-        }
-
-        static var fastForward: LocalizedStringKey {
-            "media.fast_forward"
-        }
-
-        static var mute: LocalizedStringKey {
-            "media.mute"
-        }
-
-        static var volumeDown: LocalizedStringKey {
-            "media.volume_down"
-        }
-
-        static var volumeUp: LocalizedStringKey {
-            "media.volume_up"
         }
     }
 
@@ -668,98 +534,6 @@ extension L10n {
     enum Bluetooth {
         static var advertisedName: String {
             String(localized: "bluetooth.advertised_name")
-        }
-
-        static var serviceDescription: String {
-            String(localized: "bluetooth.service_description")
-        }
-
-        static var providerName: String {
-            String(localized: "bluetooth.provider_name")
-        }
-    }
-
-    enum TransportMode {
-        static var section: LocalizedStringKey {
-            "section.transport_mode"
-        }
-
-        static var label: LocalizedStringKey {
-            "transport_mode.label"
-        }
-
-        static var classic: LocalizedStringKey {
-            "transport_mode.classic"
-        }
-
-        static var lowEnergy: LocalizedStringKey {
-            "transport_mode.low_energy"
-        }
-
-        static var classicAbout: LocalizedStringKey {
-            "transport_mode.classic.about"
-        }
-
-        static var lowEnergyAbout: LocalizedStringKey {
-            "transport_mode.low_energy.about"
-        }
-
-        static var classicCompatibility: LocalizedStringKey {
-            "transport_mode.classic.compatibility"
-        }
-
-        static var lowEnergyCompatibility: LocalizedStringKey {
-            "transport_mode.low_energy.compatibility"
-        }
-    }
-
-    enum Classic {
-        static var pairedDevicesSection: LocalizedStringKey {
-            "section.paired_devices"
-        }
-
-        static var noPairedDevices: LocalizedStringKey {
-            "classic.no_paired_devices"
-        }
-
-        static var refresh: LocalizedStringKey {
-            "classic.refresh"
-        }
-
-        static var connect: LocalizedStringKey {
-            "classic.connect"
-        }
-
-        static var disconnect: LocalizedStringKey {
-            "classic.disconnect"
-        }
-
-        static var ready: LocalizedStringKey {
-            "classic.ready"
-        }
-
-        static var sdpPublished: LocalizedStringKey {
-            "classic.sdp_published"
-        }
-
-        static var pairFromSystemSettings: LocalizedStringKey {
-            "classic.pair_from_system_settings"
-        }
-
-        static var pairNewDevice: LocalizedStringKey {
-            "classic.pair_new_device"
-        }
-
-        static var pairWindowTitle: String {
-            String(localized: "classic.pair_window.title")
-        }
-
-        static var pairWindowHeader: String {
-            String(localized: "classic.pair_window.header")
-        }
-
-        static var pairWindowDescription: String {
-            String(localized: "classic.pair_window.description")
         }
     }
 }

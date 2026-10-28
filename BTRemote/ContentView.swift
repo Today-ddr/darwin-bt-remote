@@ -9,30 +9,17 @@ struct ContentView: View {
     @Environment(\.openURL) private var openURL
     @AppStorage(AppSettings.hasSeenWelcomeKey) private var hasSeenWelcome = false
     @AppStorage(AppSettings.fullscreenKeyboardKey) private var fullscreenKeyboard = true
-    @AppStorage(AppSettings.remoteModeKey) private var remoteMode = RemoteMode.keyboard
-    @AppStorage(AppSettings.keyboardPageKey) private var keyboardPage = KeyboardPage.fullKeyboard.rawValue
+    @AppStorage(AppSettings.inputPageKey) private var inputPage = InputPage.keyboard.rawValue
     @State private var showWelcome = false
     @State private var showGuide = false
-    #if os(macOS)
-        @State private var showAccessibilityPrompt = false
-        @State private var showConnectPrompt = false
-    #endif
 
     var body: some View {
         rootTabs
             .environmentObject(directInput)
-        #if os(iOS)
             .background(PointerLockHost(locked: directInput.isCapturing))
-        #endif
             .onChange(of: hid.isConnected) { connected in
                 guard connected else { return }
-                #if os(macOS)
-                    if !directInput.isCapturing {
-                        showConnectPrompt = true
-                    }
-                #else
-                    tab = .remote
-                #endif
+                tab = .input
             }
             .onAppear(perform: _onAppear)
             .alert(L10n.Welcome.title, isPresented: $showWelcome) {
@@ -46,28 +33,6 @@ struct ContentView: View {
                 Text(L10n.Welcome.message)
             }
             .sheet(isPresented: $showGuide) { guideSheet }
-        #if os(macOS)
-            .frame(minWidth: 480, idealWidth: 560, minHeight: 640, idealHeight: 800)
-            .onChange(of: directInput.needsAccessibility) { needs in
-                guard needs else { return }
-                showAccessibilityPrompt = true
-                directInput.clearAccessibilityRequest()
-            }
-            .alert(L10n.DirectInput.permissionTitle, isPresented: $showAccessibilityPrompt) {
-                Button(L10n.DirectInput.openSettings) { AccessibilityPermission.request() }
-                Button(L10n.Action.notNow, role: .cancel) {}
-            } message: {
-                Text(L10n.DirectInput.permissionMessage)
-            }
-            .alert(L10n.DirectInput.connectedPromptTitle, isPresented: $showConnectPrompt) {
-                Button(L10n.DirectInput.enable) { directInput.start(hid) }
-                Button(L10n.Action.notNow, role: .cancel) { tab = .remote }
-            } message: {
-                Text(L10n.DirectInput.connectedPromptMessage)
-                    + Text(verbatim: "\n\n")
-                    + Text(L10n.DirectInput.releaseHint)
-            }
-        #endif
     }
 
     private var tabs: some View {
@@ -75,69 +40,50 @@ struct ContentView: View {
             SetupView()
                 .tabItem { Label(L10n.Tab.setup, systemImage: "gearshape") }
                 .tag(AppTab.setup)
-            RemoteTabView(goToSetup: { tab = .setup })
-                .tabItem { Label(L10n.Tab.remote, systemImage: "keyboard") }
-                .tag(AppTab.remote)
+            InputView(goToSetup: { tab = .setup })
+                .tabItem { Label(L10n.Tab.input, systemImage: "keyboard") }
+                .tag(AppTab.input)
             SettingsView()
                 .tabItem { Label(L10n.Tab.settings, systemImage: "slider.horizontal.3") }
                 .tag(AppTab.settings)
         }
-        #if os(iOS)
         .nativeTabBarHidden()
-        #endif
     }
 
-    @ViewBuilder
     private var rootTabs: some View {
-        #if os(iOS)
-            GeometryReader { proxy in
-                let isLandscape = proxy.size.width > proxy.size.height
-                let showsDock = DockVisibilityPolicy.showsDock(
-                    hidesDockInLandscape: fullscreenKeyboard,
-                    isLandscape: isLandscape,
-                    selectedTab: tab,
-                    remoteMode: remoteMode,
-                    keyboardPageRawValue: keyboardPage
-                )
-                tabs
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        if showsDock {
-                            AppDock(selection: $tab)
-                        }
-                    }
-                    .animation(.easeInOut(duration: 0.18), value: showsDock)
-                    .background(appTheme.pageBackground.ignoresSafeArea())
-            }
-        #else
+        GeometryReader { proxy in
+            let isLandscape = proxy.size.width > proxy.size.height
+            let showsDock = DockVisibilityPolicy.showsDock(
+                hidesDockInLandscape: fullscreenKeyboard,
+                isLandscape: isLandscape,
+                selectedTab: tab,
+                inputPageRawValue: inputPage
+            )
             tabs
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if showsDock {
+                        AppDock(selection: $tab)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.18), value: showsDock)
                 .background(appTheme.pageBackground.ignoresSafeArea())
-        #endif
+        }
     }
 
     private func _onAppear() {
         if !hasSeenWelcome {
             showWelcome = true
         }
-        #if os(macOS)
-            if hasSeenWelcome, !AccessibilityPermission.isTrusted {
-                showAccessibilityPrompt = true
-            }
-        #endif
     }
 
     private var guideSheet: some View {
-        #if os(macOS)
-            NavigationStack { guideSheetContent }
-                .frame(minWidth: 420, minHeight: 520)
-        #else
-            NavigationView { guideSheetContent }
-                .navigationViewStyle(.stack)
-        #endif
+        NavigationView { guideSheetContent }
+            .navigationViewStyle(.stack)
     }
 
     private var guideSheetContent: some View {
-        GuideView(transport: .lowEnergy)
+        GuideView()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L10n.Action.done) { showGuide = false }
@@ -148,17 +94,9 @@ struct ContentView: View {
 
 #if DEBUG
     #Preview {
-        #if os(iOS)
-            ContentView()
-                .environmentObject(HIDPeripheral())
-                .environmentObject(HIDCentral())
-                .environmentObject(DeviceNameStore())
-        #else
-            ContentView()
-                .environmentObject(HIDPeripheral())
-                .environmentObject(HIDCentral())
-                .environmentObject(DeviceNameStore())
-                .environmentObject(HIDClassicDevice())
-        #endif
+        ContentView()
+            .environmentObject(HIDPeripheral())
+            .environmentObject(HIDCentral())
+            .environmentObject(DeviceNameStore())
     }
 #endif

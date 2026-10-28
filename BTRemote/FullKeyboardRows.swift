@@ -3,23 +3,26 @@ import SwiftUI
 extension FullKeyboardView {
     // Row definitions - each row sums to weight 15.0
 
+    /// MacBook function row: a wider Escape, then F1–F12 dividing the rest of the
+    /// same fifteen-unit grid evenly. There is no Print Screen and no standalone
+    /// forward delete, matching the MacBook keyboard this page models.
+    ///
+    /// 1.5 + twelve × 1.125 = 15u.
     var row0: [FullKeyCap] {
         [
-            FullKeyCap(.text("Esc"), weight: 1.0, L10n.Keyboard.esc, .key(.escape)),
-            FullKeyCap(.text("F1"), weight: 1.0, "F1", .key(.f1)),
-            FullKeyCap(.text("F2"), weight: 1.0, "F2", .key(.f2)),
-            FullKeyCap(.text("F3"), weight: 1.0, "F3", .key(.f3)),
-            FullKeyCap(.text("F4"), weight: 1.0, "F4", .key(.f4)),
-            FullKeyCap(.text("F5"), weight: 1.0, "F5", .key(.f5)),
-            FullKeyCap(.text("F6"), weight: 1.0, "F6", .key(.f6)),
-            FullKeyCap(.text("F7"), weight: 1.0, "F7", .key(.f7)),
-            FullKeyCap(.text("F8"), weight: 1.0, "F8", .key(.f8)),
-            FullKeyCap(.text("F9"), weight: 1.0, "F9", .key(.f9)),
-            FullKeyCap(.text("F10"), weight: 1.0, "F10", .key(.f10)),
-            FullKeyCap(.text("F11"), weight: 1.0, "F11", .key(.f11)),
-            FullKeyCap(.text("F12"), weight: 1.0, "F12", .key(.f12)),
-            FullKeyCap(.text("PrtSc"), weight: 1.0, L10n.Keyboard.printScreen, .key(.printScreen)),
-            FullKeyCap(.text("Del"), weight: 1.0, L10n.Keyboard.deleteForward, .key(.deleteForward))
+            FullKeyCap(.text("Esc"), weight: 1.5, L10n.Keyboard.esc, .key(.escape)),
+            FullKeyCap(.text("F1"), weight: 1.125, "F1", .key(.f1)),
+            FullKeyCap(.text("F2"), weight: 1.125, "F2", .key(.f2)),
+            FullKeyCap(.text("F3"), weight: 1.125, "F3", .key(.f3)),
+            FullKeyCap(.text("F4"), weight: 1.125, "F4", .key(.f4)),
+            FullKeyCap(.text("F5"), weight: 1.125, "F5", .key(.f5)),
+            FullKeyCap(.text("F6"), weight: 1.125, "F6", .key(.f6)),
+            FullKeyCap(.text("F7"), weight: 1.125, "F7", .key(.f7)),
+            FullKeyCap(.text("F8"), weight: 1.125, "F8", .key(.f8)),
+            FullKeyCap(.text("F9"), weight: 1.125, "F9", .key(.f9)),
+            FullKeyCap(.text("F10"), weight: 1.125, "F10", .key(.f10)),
+            FullKeyCap(.text("F11"), weight: 1.125, "F11", .key(.f11)),
+            FullKeyCap(.text("F12"), weight: 1.125, "F12", .key(.f12))
         ]
     }
 

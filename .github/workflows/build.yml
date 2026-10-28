@@ -72,42 +72,11 @@ jobs:
           zip -qry ../$PROJECT.ipa Payload
           cd ..
 
-      - name: Build macOS App
-        run: |
-          set -o pipefail
-          PROJECT="BTRemote"
-          xcodebuild \
-            -project $PROJECT.xcodeproj \
-            -scheme $PROJECT \
-            -configuration Release \
-            -destination "platform=macOS" \
-            -derivedDataPath .build/DerivedData \
-            CODE_SIGNING_ALLOWED=NO \
-            $VERSION_OVERRIDES \
-            build | xcbeautify
-
-          # No `|| true` here, matching build.sh: a failed ad-hoc signing used to be
-          # swallowed, and the unsigned app was still zipped and published while CI
-          # stayed green. Gatekeeper then blocked it for whoever downloaded it.
-          codesign --force --sign - --entitlements $PROJECT/entitlements.plist .build/DerivedData/Build/Products/Release/$PROJECT.app
-          mkdir -p .build/macOS-dist
-          cp -R .build/DerivedData/Build/Products/Release/$PROJECT.app .build/macOS-dist/
-          cd .build/macOS-dist
-          zip -qry ../../$PROJECT-macOS.zip $PROJECT.app
-          cd ../..
-
       - name: Upload iOS IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: BTRemote-iOS-IPA
           path: BTRemote.ipa
-          if-no-files-found: error
-
-      - name: Upload macOS App Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: BTRemote-macOS-Zip
-          path: BTRemote-macOS.zip
           if-no-files-found: error
 
   release:
@@ -123,12 +92,6 @@ jobs:
           name: BTRemote-iOS-IPA
           path: release-artifacts
 
-      - name: Download macOS artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: BTRemote-macOS-Zip
-          path: release-artifacts
-
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -137,6 +100,5 @@ jobs:
         run: |
           gh release create "$TAG" \
             release-artifacts/BTRemote.ipa \
-            release-artifacts/BTRemote-macOS.zip \
             --title "$TAG" \
             --notes "Automated release build for $TAG"

@@ -3,6 +3,7 @@ import SwiftUI
 struct TrackpadGestureSettingsView: View {
     @AppStorage(AppSettings.invertScrollKey) private var invertScroll = false
     @AppStorage(AppSettings.doubleTapDragKey) private var doubleTapDrag = true
+    @AppStorage(AppSettings.longPressDragKey) private var longPressDrag = true
     @AppStorage(AppSettings.pinchGestureActionKey) private var pinchAction = GestureDefaults.pinch.rawValue
     @AppStorage(AppSettings.rotationGestureActionKey) private var rotateAction = GestureDefaults.rotation.rawValue
 
@@ -25,7 +26,11 @@ struct TrackpadGestureSettingsView: View {
                 footer: Text(L10n.Gesture.invertScrollHint)
             ) {
                 Toggle(L10n.Gesture.invertScroll, isOn: $invertScroll)
+            }
+
+            Section(footer: Text(L10n.Gesture.longPressDragHint)) {
                 Toggle(L10n.Gesture.doubleTapDrag, isOn: $doubleTapDrag)
+                Toggle(L10n.Gesture.longPressDrag, isOn: $longPressDrag)
             }
 
             Section(header: Text(L10n.Gesture.mappingTitle)) {
@@ -47,9 +52,7 @@ struct TrackpadGestureSettingsView: View {
             }
         }
         .navigationTitle(L10n.Gesture.sectionTitle)
-        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
-        #endif
     }
 
     private func gesturePicker(_ title: LocalizedStringKey, selection: Binding<String>) -> some View {
@@ -62,9 +65,9 @@ struct TrackpadGestureSettingsView: View {
 }
 
 #if DEBUG
-#Preview {
-    NavigationView {
-        TrackpadGestureSettingsView()
+    #Preview {
+        NavigationView {
+            TrackpadGestureSettingsView()
+        }
     }
-}
 #endif

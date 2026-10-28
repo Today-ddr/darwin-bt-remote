@@ -152,9 +152,7 @@ extension HIDCentral: @preconcurrency CBCentralManagerDelegate {
         _trace("central state -> \(central.state.rawValue)")
         if central.state == .poweredOn {
             // must happen before HID services are added
-            #if os(iOS)
-                central.registerForConnectionEvents(options: nil)
-            #endif
+            central.registerForConnectionEvents(options: nil)
             refreshKnownPeripherals()
         }
         if central.state != .poweredOn {
