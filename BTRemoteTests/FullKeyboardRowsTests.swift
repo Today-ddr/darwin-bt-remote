@@ -5,7 +5,7 @@ import XCTest
 @MainActor
 final class FullKeyboardRowsTests: XCTestCase {
     func testEveryRowUsesFifteenUnits() {
-        let sut = FullKeyboardView()
+        let sut = makeSUT()
         let rows = [sut.row0, sut.row1, sut.row2, sut.row3, sut.row4, sut.row5]
 
         for (index, row) in rows.enumerated() {
@@ -14,8 +14,47 @@ final class FullKeyboardRowsTests: XCTestCase {
         }
     }
 
+    func testFunctionRowHasThirteenKeysWithAWiderEscape() {
+        let sut = makeSUT()
+        let functionRow = sut.row0
+
+        XCTAssertEqual(functionRow.count, 13)
+        XCTAssertEqual(functionRow.first?.weight ?? 0, 1.5, accuracy: 0.001)
+        for key in functionRow.dropFirst() {
+            XCTAssertEqual(key.weight, 1.125, accuracy: 0.001)
+        }
+        let total = functionRow.reduce(CGFloat.zero) { $0 + $1.weight }
+        XCTAssertEqual(total, 15, accuracy: 0.001)
+    }
+
+    func testFunctionRowExcludesPrintScreenAndForwardDelete() {
+        let sut = makeSUT()
+
+        XCTAssertFalse(
+            sut.row0.contains { key in
+                if case let .key(code) = key.action {
+                    return code == .printScreen || code == .deleteForward
+                }
+                return false
+            }
+        )
+    }
+
+    func testFunctionRowKeepsEscapeAndAllTwelveFunctionKeys() {
+        let sut = makeSUT()
+        let codes = sut.row0.compactMap { key -> Keycode? in
+            guard case let .key(code) = key.action else { return nil }
+            return code
+        }
+        let expected: [Keycode] = [
+            .escape, .f1, .f2, .f3, .f4, .f5, .f6, .f7, .f8, .f9, .f10, .f11, .f12
+        ]
+
+        XCTAssertEqual(codes, expected)
+    }
+
     func testUpArrowSitsExactlyAboveDownArrow() {
-        let sut = FullKeyboardView()
+        let sut = makeSUT()
         let up = key(.upArrow, in: sut.row4)
         let down = key(.downArrow, in: sut.row5)
         let upStart = startUnits(before: up.index, in: sut.row4)
@@ -26,7 +65,7 @@ final class FullKeyboardRowsTests: XCTestCase {
     }
 
     func testMainRowsUseStandardModifierWidths() throws {
-        let sut = FullKeyboardView()
+        let sut = makeSUT()
         let enter = try XCTUnwrap(sut.row3.last)
         let leftShift = try XCTUnwrap(sut.row4.first)
         let rightShift = try XCTUnwrap(sut.row4.last)
@@ -38,7 +77,7 @@ final class FullKeyboardRowsTests: XCTestCase {
     }
 
     func testBottomRowUsesAppleModifierOrder() {
-        let sut = FullKeyboardView()
+        let sut = makeSUT()
         let modifiers = sut.row5.compactMap { key -> KeyboardModifiers? in
             guard case let .modifier(mod) = key.action else { return nil }
             return mod
@@ -51,10 +90,14 @@ final class FullKeyboardRowsTests: XCTestCase {
     }
 
     func testBottomRowUsesTheFullTrailingEdge() {
-        let sut = FullKeyboardView()
+        let sut = makeSUT()
         let trailing = sut.row5.suffix(3)
 
         XCTAssertEqual(trailing.map(\.weight), [1.0, 1.0, 1.75])
+    }
+
+    private func makeSUT() -> FullKeyboardView {
+        FullKeyboardView(releases: InputReleaseCoordinator())
     }
 
     private func key(
