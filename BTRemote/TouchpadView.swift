@@ -668,7 +668,9 @@ struct TouchpadView: UIViewRepresentable {
         /// Five-finger gestures are out of scope; no recognizer may begin with more
         /// than four touches even if the hardware can report them.
         nonisolated func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-            gestureRecognizer.numberOfTouches <= TrackpadGestureLimits.maximumFingerCount
+            MainActor.assumeIsolated {
+                gestureRecognizer.numberOfTouches <= TrackpadGestureLimits.maximumFingerCount
+            }
         }
     }
 }
