@@ -9,10 +9,6 @@ private let trackpadBottomInset: CGFloat = 8
 private let maximumKeyHeight: CGFloat = 52
 /// Shortest a key gets before the keyboard stops scaling down.
 private let minimumKeyHeight: CGFloat = 28
-/// Space kept either side of the keys, on top of the landscape safe-area padding `body`
-/// applies. The keyboard is allowed into the horizontal safe area, so together they are
-/// what stands between the outermost keys and the edge of the screen.
-private let keyHorizontalMargin: CGFloat = 8
 /// How far above a cap its press bubble floats, how much taller than the cap the bubble
 /// is, how round its corners are, and how much larger its label is drawn than the cap's.
 private let bubbleGap: CGFloat = 4
@@ -46,10 +42,19 @@ struct FullKeyboardView: View {
         // device and the orientation we are actually in.
         GeometryReader { outer in
             let insets = outer.safeAreaInsets
+            let leadingMargin = FullKeyboardLayoutPolicy.keyHorizontalMargin(
+                isLandscape: outer.size.width > outer.size.height,
+                safeAreaInset: insets.leading
+            )
+            let trailingMargin = FullKeyboardLayoutPolicy.keyHorizontalMargin(
+                isLandscape: outer.size.width > outer.size.height,
+                safeAreaInset: insets.trailing
+            )
             GeometryReader { geo in
                 keyboard(size: geo.size)
             }
-            .padding(.horizontal, keyHorizontalMargin)
+            .padding(.leading, leadingMargin)
+            .padding(.trailing, trailingMargin)
             .padding(.vertical, 4)
             // Keep the keys out from under the island and out of the rounded corners, which
             // in landscape sit at the leading and trailing edges. The padding is the system's
@@ -125,7 +130,7 @@ struct FullKeyboardView: View {
         isLandscape: Bool,
         fillsHeight: Bool
     ) -> some View {
-        let gap: CGFloat = isLandscape ? 5 : 4
+        let gap = FullKeyboardLayoutPolicy.keyGap
         let totalRows: CGFloat = 6
         let availableHeight = size.height - (totalRows - 1) * gap
         let idealKeyHeight = availableHeight / totalRows

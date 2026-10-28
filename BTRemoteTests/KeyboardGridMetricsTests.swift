@@ -26,6 +26,13 @@ final class KeyboardGridMetricsTests: XCTestCase {
         XCTAssertEqual(last.maxX, 597.5, accuracy: 0.001)
     }
 
+    func testFourPointGapUsesTheSharedKeySpacing() {
+        let sut = KeyboardGridMetrics(width: 600, gap: FullKeyboardLayoutPolicy.keyGap)
+        let key = sut.frame(startUnits: 0, widthUnits: 1, height: 44)
+
+        XCTAssertEqual(key.width, 36, accuracy: 0.001)
+    }
+
     func testZeroWidthDoesNotProduceNegativeFrames() {
         let sut = KeyboardGridMetrics(width: 0, gap: 5)
         let frame = sut.frame(startUnits: 0, widthUnits: 1, height: 44)
