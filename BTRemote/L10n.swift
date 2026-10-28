@@ -413,22 +413,6 @@ extension L10n {
         static var classic: LocalizedStringKey {
             "keyboard.classic"
         }
-
-        static var statusConnected: LocalizedStringKey {
-            "keyboard.status_connected"
-        }
-
-        static var statusReady: LocalizedStringKey {
-            "keyboard.status_ready"
-        }
-
-        static var statusInactive: LocalizedStringKey {
-            "keyboard.status_inactive"
-        }
-
-        static var statusError: LocalizedStringKey {
-            "keyboard.status_error"
-        }
     }
 
     enum Gesture {

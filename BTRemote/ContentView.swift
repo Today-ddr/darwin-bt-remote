@@ -99,59 +99,21 @@ struct ContentView: View {
                     remoteMode: remoteMode,
                     keyboardPageRawValue: keyboardPage
                 )
-                let globalOrigin = proxy.frame(in: .global).origin
-                ZStack(alignment: .topLeading) {
-                    tabs
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .safeAreaInset(edge: .bottom, spacing: 0) {
-                            if showsDock {
-                                AppDock(selection: $tab)
-                            }
+                tabs
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        if showsDock {
+                            AppDock(selection: $tab)
                         }
-                        .animation(.easeInOut(duration: 0.18), value: showsDock)
-                        .background(appTheme.pageBackground.ignoresSafeArea())
-
-                    if isLandscape,
-                       !showsDock,
-                       tab == .remote,
-                       remoteMode == .keyboard,
-                       keyboardPage == KeyboardPage.fullKeyboard.rawValue,
-                       KeyboardEarLayoutPolicy.showsBadge(
-                           in: proxy.size,
-                           earWidth: proxy.safeAreaInsets.leading
-                       )
-                    {
-                        KeyboardStatusBadge(status: keyboardEarStatus)
-                            .padding(.top, 4)
-                            .offset(
-                                x: KeyboardEarLayoutPolicy.badgeLeadingOffset(
-                                    for: proxy.safeAreaInsets.leading,
-                                    coordinateOriginX: globalOrigin.x
-                                ),
-                                y: -globalOrigin.y
-                            )
-                            .allowsHitTesting(false)
                     }
-                }
+                    .animation(.easeInOut(duration: 0.18), value: showsDock)
+                    .background(appTheme.pageBackground.ignoresSafeArea())
             }
         #else
             tabs
                 .background(appTheme.pageBackground.ignoresSafeArea())
         #endif
     }
-
-    #if os(iOS)
-        private var keyboardEarStatus: KeyboardStatusSnapshot {
-            KeyboardStatusSnapshot(
-                isActive: hid.isActive,
-                isConnected: hid.isConnected,
-                connectedHostCount: hid.connectedHostCount,
-                errorMessage: hid.activeError,
-                isCapsLockOn: false,
-                isShiftActive: false
-            )
-        }
-    #endif
 
     private func _onAppear() {
         if !hasSeenWelcome {
