@@ -1,26 +1,28 @@
 import SwiftUI
 
 enum TrackpadGestureAction: String, CaseIterable, Identifiable {
-    case none = "none"
+    case none
     case appSwitcher = "app_switcher"
-    case home = "home"
-    case dock = "dock"
+    case home
+    case dock
     case previousApp = "previous_app"
     case nextApp = "next_app"
-    case spotlight = "spotlight"
+    case spotlight
     case controlCenter = "control_center"
     case notificationCenter = "notification_center"
     case missionControl = "mission_control"
     case appExpose = "app_expose"
     case switchSpaceLeft = "switch_space_left"
     case switchSpaceRight = "switch_space_right"
-    case screenshot = "screenshot"
+    case screenshot
     case middleClick = "middle_click"
-    case zoom = "zoom"
+    case zoom
     case rotateLeft = "rotate_left"
     case rotateRight = "rotate_right"
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var title: LocalizedStringKey {
         switch self {
@@ -153,10 +155,18 @@ struct GestureChord {
         }
         guard let key else { return "" }
         var symbols = ""
-        if modifiers.contains(.leftCtrl) { symbols += "⌃" }
-        if modifiers.contains(.leftAlt) { symbols += "⌥" }
-        if modifiers.contains(.leftShift) { symbols += "⇧" }
-        if modifiers.contains(.leftGUI) { symbols += "⌘" }
+        if modifiers.contains(.leftCtrl) {
+            symbols += "⌃"
+        }
+        if modifiers.contains(.leftAlt) {
+            symbols += "⌥"
+        }
+        if modifiers.contains(.leftShift) {
+            symbols += "⇧"
+        }
+        if modifiers.contains(.leftGUI) {
+            symbols += "⌘"
+        }
         symbols += key.symbol
         return symbols
     }

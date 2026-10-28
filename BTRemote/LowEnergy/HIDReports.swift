@@ -22,8 +22,12 @@ struct DigitizerReport: Sendable, Equatable {
 
         // Contact 1
         var c1Flags: UInt8 = 0
-        if contact1.tipSwitch { c1Flags |= 1 }
-        if contact1.confidence { c1Flags |= 2 }
+        if contact1.tipSwitch {
+            c1Flags |= 1
+        }
+        if contact1.confidence {
+            c1Flags |= 2
+        }
         bytes[1] = c1Flags
         bytes[2] = contact1.id
         bytes[3] = UInt8(contact1.x & 0xFF)
@@ -33,8 +37,12 @@ struct DigitizerReport: Sendable, Equatable {
 
         // Contact 2
         var c2Flags: UInt8 = 0
-        if contact2.tipSwitch { c2Flags |= 1 }
-        if contact2.confidence { c2Flags |= 2 }
+        if contact2.tipSwitch {
+            c2Flags |= 1
+        }
+        if contact2.confidence {
+            c2Flags |= 2
+        }
         bytes[7] = c2Flags
         bytes[8] = contact2.id
         bytes[9] = UInt8(contact2.x & 0xFF)

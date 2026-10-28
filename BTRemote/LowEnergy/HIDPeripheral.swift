@@ -611,7 +611,9 @@ final class HIDPeripheral: NSObject, ObservableObject {
 
     private func buildHIDService(includingBattery battery: CBMutableService?) -> CBMutableService {
         let service = CBMutableService(type: HIDProfile.hidService, primary: true)
-        if let battery { service.includedServices = [battery] }
+        if let battery {
+            service.includedServices = [battery]
+        }
 
         let controlPoint = CBMutableCharacteristic(
             type: HIDProfile.hidControlPoint,
@@ -1095,7 +1097,9 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
         guard let value = request.value else { return }
         switch request.characteristic.uuid {
         case HIDProfile.bootKeyboardOutputReport:
-            if let byte = value.first { keyboardLEDs = KeyboardLEDs(byte: byte) }
+            if let byte = value.first {
+                keyboardLEDs = KeyboardLEDs(byte: byte)
+            }
         case HIDProfile.report:
             if reportID(forCharacteristic: request.characteristic) == ReportID.keyboardLEDs.rawValue,
                let byte = value.first
