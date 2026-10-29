@@ -7,8 +7,6 @@ struct ContentView: View {
     @Environment(\.appTheme) private var appTheme
     @Environment(\.openURL) private var openURL
     @AppStorage(AppSettings.hasSeenWelcomeKey) private var hasSeenWelcome = false
-    @AppStorage(AppSettings.fullscreenKeyboardKey) private var fullscreenKeyboard = true
-    @AppStorage(AppSettings.inputPageKey) private var inputPage = InputPage.keyboard.rawValue
     @State private var showWelcome = false
     @State private var showGuide = false
 
@@ -57,10 +55,8 @@ struct ContentView: View {
         GeometryReader { proxy in
             let isLandscape = proxy.size.width > proxy.size.height
             let showsDock = DockVisibilityPolicy.showsDock(
-                hidesDockInLandscape: fullscreenKeyboard,
                 isLandscape: isLandscape,
-                selectedTab: tab,
-                inputPageRawValue: inputPage
+                selectedTab: tab
             )
             tabs
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

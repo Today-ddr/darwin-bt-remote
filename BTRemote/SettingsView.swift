@@ -6,7 +6,6 @@ struct SettingsView: View {
     @Environment(\.hid) private var hid
     @State private var showReset = false
     @AppStorage(AppSettings.colorSchemeKey) private var selectedThemeRaw = AppTheme.system.rawValue
-    @AppStorage(AppSettings.fullscreenKeyboardKey) private var fullscreenKeyboard = true
     @AppStorage(AppSettings.touchpadSensitivityKey) private var touchpadSensitivity = AppSettings.defaultPointerSensitivity
     @AppStorage(AppSettings.scrollSensitivityKey) private var scrollSensitivity = AppSettings.defaultScrollSensitivity
     @AppStorage(AppSettings.developerModeKey) private var developerMode = false
@@ -46,13 +45,6 @@ struct SettingsView: View {
                 if selectedTheme == .oled {
                     Text(L10n.Settings.oledHint)
                 }
-            }
-            Section {
-                Toggle(L10n.Settings.fullScreenKeyboard, isOn: $fullscreenKeyboard)
-            } header: {
-                Text(L10n.Settings.keyboard)
-            } footer: {
-                Text(L10n.Settings.fullScreenKeyboardHint)
             }
             Section(header: Text(L10n.Settings.trackpad)) {
                 sensitivityRow(L10n.Settings.trackingSpeed, value: $touchpadSensitivity, range: AppSettings.pointerSensitivityRange)

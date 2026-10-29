@@ -39,7 +39,6 @@ struct BTRemoteApp: App {
         UserDefaults.standard.register(defaults: [
             AppSettings.useServiceChangedKey: true,
             AppSettings.colorSchemeKey: AppTheme.system.rawValue,
-            AppSettings.fullscreenKeyboardKey: true,
             AppSettings.inputPageKey: InputPage.keyboard.rawValue,
             // Haptics read raw UserDefaults, so the on-by-default state has to be
             // registered here — an @AppStorage default alone is invisible to them.

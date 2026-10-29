@@ -14,7 +14,6 @@ enum AppSettings {
     static let hasSeenWelcomeKey = "BTRemote.hasSeenWelcome"
     /// Raw value of `InputPage`; the last page shown in the input tab.
     static let inputPageKey = "BTRemote.inputPage"
-    static let fullscreenKeyboardKey = "BTRemote.fullscreenKeyboard"
     static let advertisedNameKey = "BTRemote.advertisedName"
     static let invertScrollKey = "BTRemote.invertScroll"
     static let pinchGestureActionKey = "BTRemote.pinchGestureAction"

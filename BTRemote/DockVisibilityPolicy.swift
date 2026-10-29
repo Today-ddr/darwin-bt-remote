@@ -1,15 +1,10 @@
 enum DockVisibilityPolicy {
+    /// Input is landscape-only, so its transition frame must not flash a dock
+    /// that is about to disappear. Other tabs show the dock only in portrait.
     static func showsDock(
-        hidesDockInLandscape: Bool,
         isLandscape: Bool,
-        selectedTab: AppTab,
-        inputPageRawValue: Int
+        selectedTab: AppTab
     ) -> Bool {
-        guard hidesDockInLandscape else { return true }
-        let isLandscapeCombo =
-            isLandscape
-                && selectedTab == .input
-                && inputPageRawValue == InputPage.keyboard.rawValue
-        return !isLandscapeCombo
+        !isLandscape && selectedTab != .input
     }
 }

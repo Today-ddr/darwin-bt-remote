@@ -166,18 +166,6 @@ extension L10n {
             "settings.theme.oled_hint"
         }
 
-        static var keyboard: LocalizedStringKey {
-            "settings.keyboard"
-        }
-
-        static var fullScreenKeyboard: LocalizedStringKey {
-            "settings.fullscreen_keyboard"
-        }
-
-        static var fullScreenKeyboardHint: LocalizedStringKey {
-            "settings.fullscreen_keyboard_hint"
-        }
-
         static var trackpad: LocalizedStringKey {
             "settings.trackpad"
         }
