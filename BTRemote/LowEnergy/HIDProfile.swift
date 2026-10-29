@@ -11,7 +11,6 @@ enum HIDProfile {
     nonisolated(unsafe) static let hidService = CBUUID(string: "00001812-0000-1000-8000-00805F9B34FB")
 
     // descriptors
-    nonisolated(unsafe) static let cccd = CBUUID(string: "00002902-0000-1000-8000-00805F9B34FB")
     nonisolated(unsafe) static let externalReportReference = CBUUID(string: "00002907-0000-1000-8000-00805F9B34FB")
     nonisolated(unsafe) static let reportReference = CBUUID(string: "00002908-0000-1000-8000-00805F9B34FB")
 

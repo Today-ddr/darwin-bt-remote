@@ -55,9 +55,16 @@ struct BTRemoteApp: App {
         HIDInput.make(lowEnergy: lowEnergy)
     }
 
-    /// The scene leaving the foreground suspends the peripheral, and coming back resumes
+    /// The scene entering the background suspends the peripheral, and coming back resumes
     /// only what this app itself suspended, so a Stop Advertising the user tapped is not
     /// undone by backgrounding the app and coming back.
+    ///
+    /// Only `.background` is a departure. `.inactive` is what a pull-down of Control Center,
+    /// a system alert, the app switcher, or an incoming call produces while the app is
+    /// still on screen; tearing down every host for one of those would drop the connection
+    /// for something the user did not leave the app for. Actually going to the Home screen
+    /// or another app passes through `.inactive` into `.background`, which is where the
+    /// teardown happens.
     ///
     /// Suspending takes the peripheral down and ends the links with it. Stopping
     /// advertising alone is not enough: a host that was already connected keeps its link
@@ -66,24 +73,24 @@ struct BTRemoteApp: App {
     /// rediscoverable — the app advertises again on the way back in — and the user's own
     /// state survives it.
     ///
-    /// `isAdvertising` is the only thing consulted for whether to suspend, rather than
-    /// `autoAdvertise` or `isHIDServiceAdded`: it is what says a host could really find
-    /// us. The resume is gated on `didSuspendPeripheral` instead, which is what keeps it
-    /// a resume rather than a way to start advertising.
+    /// `isOnTheAir` is what decides whether there is anything to suspend: it covers the
+    /// install window and a live service whose advertising the user already stopped, not
+    /// just `isAdvertising`. The resume is gated on `didSuspendPeripheral`, which is what
+    /// keeps it a resume rather than a way to start advertising.
     private func _scenePhaseChanged(_ phase: ScenePhase) {
         switch phase {
         case .active:
             guard didSuspendPeripheral else { return }
             didSuspendPeripheral = false
             lowEnergy.resume()
-        case .inactive, .background:
-            // a lock or the app switcher passes through `.inactive` and may report only
-            // that, so both mean the app is no longer in front, which is when it has to
-            // let go of its hosts. Suspending is idempotent, so a second phase of the
-            // same departure can reach here with nothing left to do.
+        case .background:
             guard lowEnergy.isOnTheAir else { return }
             lowEnergy.suspend()
             didSuspendPeripheral = true
+        case .inactive:
+            // not a departure: Control Center, a system dialog or a call can leave the app
+            // inactive while it is still in front. The links stay until `.background`.
+            break
         @unknown default:
             break
         }

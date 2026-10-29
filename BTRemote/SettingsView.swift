@@ -119,6 +119,11 @@ struct SettingsView: View {
         if let bundleID = Bundle.main.bundleIdentifier {
             UserDefaults.standard.removePersistentDomain(forName: bundleID)
         }
+        // deleting the domain does not clear what the engine already holds in memory: the
+        // block list is mirrored in a set and the advertised name is cached for the next
+        // advertisement. Without this, a reset would keep the old mute/block decisions until
+        // the next launch, and a stale name would stay on the air.
+        lowEnergy.resetUserState()
     }
 
     private var batterySection: some View {

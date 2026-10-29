@@ -81,14 +81,24 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// subscriber of the old one claim control of the new one.
     private var pManager: CBPeripheralManager?
     private var batteryServiceObj: CBMutableService?
+    /// Whether services may exist at all. It is the "expose" half of the power state and
+    /// survives `stop()`: stopping advertising must not take down services a host is still
+    /// using, and the install chain that was already running must be allowed to finish.
     private var isHIDServiceAllowed = false
+    /// Whether the user wants to be discoverable. `stop()` clears only this; a late
+    /// `didAdd`/`didStartAdvertising` callback must not advertise after it has gone false.
+    private var isAdvertisingRequested = false
     private var isReadyToSendNotification = true
-    /// What `suspend` interrupted, so `resume` restores that rather than the maximum: a
-    /// suspension with the user's advertising already off must not come back on the air.
-    private var wasAdvertisingBeforeSuspend = false
+    /// The two intents as they were when `suspend` took the peripheral apart, so `resume`
+    /// restores exactly what was running rather than the maximum.
+    private var wasServiceAllowedBeforeSuspend = false
+    private var wasAdvertisingRequestedBeforeSuspend = false
     /// Protocol Mode characteristic value: 0x01 report protocol, 0x00 boot protocol.
     /// HOGP lets a host switch it, so the read has to answer with what was written.
     private var currentProtocolMode: UInt8 = 0x01
+    /// The last advertising error put into `lastError`, so a later success clears that
+    /// message without touching an unrelated error.
+    private var lastAdvertisingError: String?
 
     private var charsByReportID: [UInt8: CBMutableCharacteristic] = [:]
     private var bootMouseInputChar: CBMutableCharacteristic?
@@ -134,15 +144,20 @@ final class HIDPeripheral: NSObject, ObservableObject {
     private var parkSequence: UInt64 = 0
 
     func start() {
+        // Both intents are explicit: services may be exposed, and the user asked to be
+        // discoverable. The install chain is asynchronous, so neither is inferred from a
+        // callback that may not have run yet.
         isHIDServiceAllowed = true
+        isAdvertisingRequested = true
         if pManager == nil {
             _makeManager(showPowerAlert: true)
-        } else if state == .poweredOn {
-            if isHIDServiceAdded {
-                startAdvertisingNow()
-            } else {
-                installServices()
-            }
+            return
+        }
+        guard state == .poweredOn else { return }
+        if isHIDServiceAdded {
+            startAdvertisingNow()
+        } else {
+            installServices()
         }
     }
 
@@ -168,15 +183,16 @@ final class HIDPeripheral: NSObject, ObservableObject {
         )
     }
 
-    /// Stop advertising; the way back in is `start`, which resumes from whatever point this
-    /// left off. It is the user's own Stop Advertising — leaving the foreground goes through
-    /// `suspend` instead, which ends the hosts' links as well. It deliberately keeps no
-    /// opinion about why it was called: "we stopped it, bring it back" is the caller's own
-    /// state — the scene phase is what knows it — and keeping that here would make a user's
-    /// own stop indistinguishable from one that is meant to be undone. A host that is still
-    /// subscribed keeps its link: this stops advertising, it does not end the connection.
+    /// Stop advertising, and only that.
+    ///
+    /// Services stay installed and a host that is still subscribed keeps its link: this is
+    /// the user's own Stop Advertising and it means "do not let new hosts find me", not
+    /// "throw out the host I am using". The separate `isAdvertisingRequested` flag is what
+    /// a late install callback consults, so tapping Stop while the services are still being
+    /// added cannot be undone by `didAdd` arriving afterwards. Leaving the foreground goes
+    /// through `suspend` instead, which ends the links as well.
     func stop() {
-        isHIDServiceAllowed = false
+        isAdvertisingRequested = false
         pManager?.stopAdvertising()
         isAdvertising = false
     }
@@ -185,17 +201,17 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// host could be or already is connected to, or in the middle of bringing either up.
     ///
     /// This is the test for "is there something to take down", and `isAdvertising` alone is
-    /// not it. `stop()` stops advertising but leaves the links alone, so after the user taps
-    /// Stop Advertising the app is still reachable by a subscribed host while
-    /// `isAdvertising == false`; suspending on that flag would skip the teardown and leave
-    /// the link — and the radio — alive through the whole time in the background, which is
-    /// the wake-up this is here to end.
+    /// not it. `stop()` stops advertising but leaves the services and the links alone, so
+    /// after the user taps Stop Advertising the app is still reachable by a subscribed host
+    /// while `isAdvertising == false`; suspending on that flag would skip the teardown and
+    /// leave the link — and the radio — alive through the whole time in the background.
     ///
-    /// `isHIDServiceAllowed` covers the last case: between `start()` and the services being
-    /// installed there is no advertising and no service yet, but the app is on its way up,
-    /// and a background landing in that window still has to take it down again.
+    /// `isHIDServiceAllowed` and `isAdvertisingRequested` cover the install window: between
+    /// `start()` and the services being installed there is no advertising and no service
+    /// yet, but the app is on its way up, and a background landing in that window still has
+    /// to take it down again.
     var isOnTheAir: Bool {
-        isHIDServiceAllowed || isAdvertising || isHIDServiceAdded
+        isHIDServiceAllowed || isAdvertisingRequested || isAdvertising || isHIDServiceAdded
     }
 
     /// Suspend the peripheral: end advertising *and* the links hosts are holding, and leave
@@ -209,54 +225,64 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// teardown `_resetForRestart` has always performed; `_tearDownPeripheral` is that body,
     /// with what it takes down and what it deliberately leaves standing written out.
     ///
-    /// It does not call that restart, because a suspend is not one: a restart is the power
-    /// alert's "the radio was unusable, start over" and its caller starts again in the same
-    /// breath, while a suspend is a stop with no promise of a return. The flag is where the
-    /// difference shows: `isHIDServiceAllowed` goes false here, so a service cannot be
-    /// installed into a peripheral that is meant to be down — a late callback from the
-    /// manager being released, say. `start`/`resume` is what sets it true again.
+    /// Both intents are remembered before they are cleared, and both are cleared here: a
+    /// service must not be installed into a peripheral that is meant to be down, and a late
+    /// advertising callback must not put it back on the air. `resume` restores the two
+    /// independently, so a suspension that found only a live link does not switch
+    /// advertising on for a user who had tapped Stop.
     ///
     /// Nothing is surfaced by a suspend. Input stops because the app was taken away, not
     /// because it went nowhere, and the dropped-input notice goes with the teardown rather
     /// than sitting on screen through the suspension (see `_tearDownPeripheral`).
     func suspend() {
         _trace("suspend")
-        // Remembered before the teardown clears it, so a resume restores what was actually
-        // running and not merely whatever the peripheral could be. A host can be connected
-        // after the user tapped Stop Advertising — services installed, advertising off —
-        // and that teardown still has to happen, but coming back must not turn advertising
-        // on for someone who switched it off.
-        wasAdvertisingBeforeSuspend = isAdvertising
+        wasServiceAllowedBeforeSuspend = isHIDServiceAllowed
+        wasAdvertisingRequestedBeforeSuspend = isAdvertisingRequested
         isHIDServiceAllowed = false
+        isAdvertisingRequested = false
         _tearDownPeripheral()
     }
 
-    /// Bring back what `suspend` took down, and say again that the app wants to be found.
+    /// Bring back what `suspend` took down.
     ///
-    /// The whole of a resume is `start()`: with the manager gone that builds one, and the
-    /// install chain follows from the delegate callbacks — services, then advertising —
-    /// exactly as it does at launch. So this is an intent and nothing else: advertising is
-    /// not claimed here, `isAdvertising` is neither set nor cleared by it, and a resume that
-    /// has returned has not necessarily advertised yet.
+    /// The two remembered intents are restored independently. Services are rebuilt whenever
+    /// they were allowed before the suspension, even if advertising was already off — that
+    /// is the C2 this fixes: `start()` used to be the only path that rebuilt anything, and a
+    /// suspension that interrupted only a live link came back through `observeState`, which
+    /// installs nothing, so the services never returned. Advertising is requested again only
+    /// when it was requested before; otherwise the rebuilt peripheral stays off the air.
     ///
     /// Whether a resume is wanted at all is the caller's own question, and `BTRemoteApp`
     /// answers it with the bit it keeps for that: only what this app suspended is resumed,
     /// so a Stop Advertising the user tapped stays stopped and a launch resumes nothing.
     ///
-    /// What comes back is what was running when the app left, not everything the peripheral
-    /// could be. A suspend that interrupted advertising restores it; one that interrupted
-    /// only a live link — services up, advertising already off because the user turned it
-    /// off — rebuilds the services and stays off the air, because that is the state it
-    /// found. Otherwise every trip to the background would switch advertising on for a user
-    /// who had switched it off.
+    /// A new manager installs through its delegate callbacks, so this returns before the
+    /// services exist; it is an intent, not a completed install.
     func resume() {
         _trace("resume")
-        if wasAdvertisingBeforeSuspend {
-            start()
-        } else {
+        let serviceAllowed = wasServiceAllowedBeforeSuspend
+        let advertisingRequested = wasAdvertisingRequestedBeforeSuspend
+        wasServiceAllowedBeforeSuspend = false
+        wasAdvertisingRequestedBeforeSuspend = false
+        isHIDServiceAllowed = serviceAllowed
+        isAdvertisingRequested = advertisingRequested
+        guard serviceAllowed else {
             observeState()
+            return
         }
-        wasAdvertisingBeforeSuspend = false
+        if pManager == nil {
+            // the install chain follows `peripheralManagerDidUpdateState` on the new manager
+            _makeManager(showPowerAlert: false)
+            return
+        }
+        guard state == .poweredOn else { return }
+        if isHIDServiceAdded {
+            if advertisingRequested {
+                startAdvertisingNow()
+            }
+        } else {
+            installServices()
+        }
     }
 
     func promptPowerAlert() {
@@ -282,28 +308,30 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// `suspend` so the two cannot drift apart: both need the chain gone, and neither may
     /// keep anything that names the old manager's services, characteristics or subscribers.
     ///
-    /// What it deliberately leaves standing is part of its contract, because both callers
-    /// depend on it:
+    /// The intent flags are not touched here: the two callers mean different things by them
+    /// (`suspend` clears both before calling, `_resetForRestart` leaves them for `start`).
     ///
-    /// - `blockedCentrals` — the hosts the user removed. That set is the user's own decision
-    ///   and is persisted for exactly that reason, so it outlives any link; clearing it here
-    ///   would resurrect a host the user removed, which is the bug the persistent list was
-    ///   written to fix. A restart already kept it and a suspend must too.
-    /// - `state` — the last state the radio reported. There is a manager again as soon as
-    ///   `start` runs (which is what `resume` is for), and until its first callback lands,
-    ///   this is what the Setup page's Start Advertising button reads to choose between
-    ///   starting and complaining about the radio: a teardown that reset it to `.unknown`
-    ///   would send that tap down the power-alert branch for a radio that is on.
-    ///   `observeState` exists for the same reason at launch.
-    /// - the state that belongs to the device rather than to a link: `advertiseLocalName`,
-    ///   `batteryLevel`, `keyboardLEDs` and the cached reports.
-    ///
-    /// `isHIDServiceAllowed` is not touched here either: the two callers mean different
-    /// things by it, and each sets it the way its own semantics require.
+    /// What survives is deliberately only what belongs to the device rather than to a link:
+    /// `blockedCentrals`, `state`, `advertiseLocalName`, `batteryLevel` and the battery
+    /// report. Input reports are reset to zero by `_clearLinkState`, so a host that
+    /// subscribes after a rebuild can never be replayed the previous link's held key.
     private func _tearDownPeripheral() {
         pManager?.stopAdvertising()
         pManager = nil
         isAdvertising = false
+        _clearLinkState()
+    }
+
+    /// Drops everything that names the current manager's services, characteristics, links
+    /// and input state. Used both when the manager is released and when the radio reports a
+    /// state other than `.poweredOn`; in the latter case the manager itself stays so it can
+    /// report the radio coming back.
+    ///
+    /// The input report cache is reset to zero — a release baseline — rather than kept, so
+    /// a new subscription after a power cycle or a resume cannot be handed the key that was
+    /// held when the old link died. Battery is not input: its level belongs to the device
+    /// and is kept.
+    private func _clearLinkState() {
         isHIDServiceAdded = false
         isReadyToSendNotification = true
         pendingBroadcasts.removeAll()
@@ -315,23 +343,28 @@ final class HIDPeripheral: NSObject, ObservableObject {
         bootKeyboardInputChar = nil
         charsByReportID.removeAll()
         // link state, all of it: the subscribers, the live `CBCentral` objects and the
-        // connected set were the old manager's knowledge and do not survive releasing it
+        // connected set were the old manager's knowledge and do not survive it
         subscribedCentrals.removeAll()
         // a mute is a filter on a link rather than a decision about the host — it already
         // goes when the host unsubscribes (`didUnsubscribeFrom`) — so it goes with the link
-        // here too. Only the block list outlives a link (see the note above).
+        // here too. Only the block list outlives a link.
         inactiveCentrals.removeAll()
         connectedCentrals.removeAll()
         centralObjects.removeAll()
-        // control starts clean. No host is connected after a teardown, so the first host to
-        // subscribe claims the idle peripheral the same way it does on a cold start —
-        // `didSubscribeTo` claims only when nothing holds control, so there is nobody for a
-        // reconnect to steal it from. Leaving the old host active would point control at a
-        // host that is gone, and a resume would then read as input being routed while
-        // nothing is subscribed.
+        // control starts clean: the first host to subscribe claims the idle peripheral the
+        // same way it does on a cold start. Leaving the old host active would point control
+        // at a host that is gone.
         activeCentral = nil
         subscribeOrder.removeAll()
         subscribeCounter = 0
+        keyboardLEDs = []
+        currentProtocolMode = 0x01
+        // input goes back to the release baseline; battery is device state, not link state
+        let cachedBattery = cachedReports[ReportID.battery.rawValue]
+        cachedReports = Self.zeroInputReports
+        if let cachedBattery {
+            cachedReports[ReportID.battery.rawValue] = cachedBattery
+        }
         // the notice says reports are being dropped. A teardown ends every link on purpose,
         // so leaving it up would describe a deliberate act, and nothing would retract it
         // while no host is subscribed: `_clearDroppedInputNoticeIfHeld` needs a report to
@@ -448,6 +481,26 @@ final class HIDPeripheral: NSObject, ObservableObject {
             blockedCentrals.map(\.uuidString).sorted(),
             forKey: AppSettings.blockedCentralsKey
         )
+    }
+
+    /// Clears the user state this engine owns outside `UserDefaults`, for the Settings
+    /// "reset everything" path: the removal list is kept in memory as well as on disk, and
+    /// the advertised name is cached in a stored property, so deleting the defaults domain
+    /// alone would leave both alive until the next launch.
+    ///
+    /// If advertising is live, stop/start is what makes the restored name visible: the
+    /// advertisement payload is a snapshot taken when advertising starts, and there is no
+    /// way to update it in place.
+    func resetUserState() {
+        blockedCentrals.removeAll()
+        _saveBlockedCentrals()
+        advertiseLocalName = L10n.Bluetooth.advertisedName
+        lastError = nil
+        if isAdvertising {
+            stop()
+            start()
+        }
+        objectWillChange.send()
     }
 
     /// Make a subscribed, unblocked and unmuted host the one that receives input, replacing
@@ -628,7 +681,7 @@ final class HIDPeripheral: NSObject, ObservableObject {
     }
 
     private func installServices() {
-        guard let pManager, !isHIDServiceAdded, batteryServiceObj == nil else { return }
+        guard isHIDServiceAllowed, let pManager, !isHIDServiceAdded, batteryServiceObj == nil else { return }
         let battery = buildBatteryService()
         batteryServiceObj = battery
         pManager.add(battery)
@@ -802,7 +855,15 @@ final class HIDPeripheral: NSObject, ObservableObject {
     }
 
     private func startAdvertisingNow() {
-        guard let pManager, !isAdvertising else { return }
+        // the request, not the callback, is the authority: a Stop tapped while the install
+        // chain was still running clears it, and a late `didAdd` must not put the radio back
+        // on the air behind the user's back
+        guard isAdvertisingRequested,
+              let pManager,
+              isHIDServiceAdded,
+              state == .poweredOn,
+              !isAdvertising
+        else { return }
         pManager.startAdvertising([
             CBAdvertisementDataLocalNameKey: advertiseLocalName,
             // hidService must stay first if more than one service is being advertised
@@ -1047,11 +1108,17 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
         guard peripheral === pManager else { return }
         state = peripheral.state
         _trace("CB state -> \(peripheral.state.rawValue)")
-        if peripheral.state == .poweredOn, isHIDServiceAllowed, !isHIDServiceAdded {
-            installServices()
-        }
-        if peripheral.state != .poweredOn {
+        guard peripheral.state == .poweredOn else {
+            // The radio went away: every service, subscription, link and input state that
+            // named the old session is gone with it. The manager itself stays so it can
+            // report the radio coming back, and the two intents stay so the rebuild knows
+            // whether to expose services and whether to advertise once they are up.
             isAdvertising = false
+            _clearLinkState()
+            return
+        }
+        if isHIDServiceAllowed, !isHIDServiceAdded {
+            installServices()
         }
     }
 
@@ -1082,12 +1149,28 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
 
     func peripheralManagerDidStartAdvertising(_ peripheral: CBPeripheralManager, error: Error?) {
         guard peripheral === pManager else { return }
+        // the user may have tapped Stop while the request was in flight; the callback must
+        // not switch advertising back on behind their back
+        guard isAdvertisingRequested else {
+            if isAdvertising {
+                peripheral.stopAdvertising()
+            }
+            isAdvertising = false
+            return
+        }
         if let error {
             isAdvertising = false
-            lastError = error.localizedDescription
-            log.error("startAdvertising error: \(error.localizedDescription, privacy: .public)")
+            let message = error.localizedDescription
+            lastAdvertisingError = message
+            lastError = message
+            log.error("startAdvertising error: \(message, privacy: .public)")
         } else {
             isAdvertising = true
+            // a stale advertising error would otherwise sit on the Setup page forever
+            if let lastAdvertisingError, lastError == lastAdvertisingError {
+                lastError = nil
+            }
+            lastAdvertisingError = nil
             _trace("advertising as \(advertiseLocalName)")
         }
     }
