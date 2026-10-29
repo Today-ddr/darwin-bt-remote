@@ -7,12 +7,9 @@ import UIKit
 struct HIDInput {
     let sendMouse: (MouseReport) -> Void
     let sendKeyboard: (KeyboardReport) -> Void
-    let sendConsumer: (ConsumerReport) -> Void
-    let sendDigitizer: (DigitizerReport) -> Void
     let updateBattery: (UInt8) -> Void
     let isActive: Bool
     let isConnected: Bool
-    let connectedHostCount: Int
     let activeError: String?
     let batteryLevel: UInt8
 
@@ -45,27 +42,22 @@ struct HIDInput {
 
 extension HIDInput {
     @MainActor
-    static func make(lowEnergy: HIDPeripheral, central: HIDCentral) -> HIDInput {
+    static func make(lowEnergy: HIDPeripheral) -> HIDInput {
         HIDInput(
             sendMouse: { lowEnergy.sendMouse($0) },
             sendKeyboard: { lowEnergy.sendKeyboard($0) },
-            sendConsumer: { lowEnergy.sendConsumer($0) },
-            sendDigitizer: { lowEnergy.sendDigitizer($0) },
             updateBattery: { lowEnergy.updateBatteryLevel($0) },
             isActive: lowEnergy.isHIDServiceAdded,
-            isConnected: lowEnergy.connectedCentrals.contains { !lowEnergy.inactiveCentrals.contains($0) } || !central.connected.isEmpty,
-            connectedHostCount: Set(
-                lowEnergy.connectedCentrals.filter { !lowEnergy.inactiveCentrals.contains($0) }
-            ).union(central.connected).count,
-            activeError: lowEnergy.lastError ?? central.lastError,
+            isConnected: lowEnergy.connectedCentrals.contains { !lowEnergy.inactiveCentrals.contains($0) },
+            activeError: lowEnergy.lastError,
             batteryLevel: lowEnergy.batteryLevel
         )
     }
 
     static var unavailable: HIDInput {
         HIDInput(
-            sendMouse: { _ in }, sendKeyboard: { _ in }, sendConsumer: { _ in }, sendDigitizer: { _ in }, updateBattery: { _ in },
-            isActive: false, isConnected: false, connectedHostCount: 0, activeError: nil, batteryLevel: 0
+            sendMouse: { _ in }, sendKeyboard: { _ in }, updateBattery: { _ in },
+            isActive: false, isConnected: false, activeError: nil, batteryLevel: 0
         )
     }
 }

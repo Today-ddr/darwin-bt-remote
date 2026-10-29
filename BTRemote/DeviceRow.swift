@@ -1,53 +1,9 @@
-import CoreBluetooth
 import SwiftUI
-
-/// scan-list device line (central role)
-struct DeviceRow<Trailing: View>: View {
-    let entry: DeviceEntry
-    var accessibilityLabel: String?
-    let action: () -> Void
-    let onInfo: () -> Void
-    @ViewBuilder let trailing: () -> Trailing
-
-    var body: some View {
-        HStack {
-            Button(action: action) {
-                HStack {
-                    RowLeadingStatus(phase: entry.isConnecting ? .connecting : (entry.isCentralConnected ? .active : .idle))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(verbatim: entry.displayName).foregroundColor(.primary)
-                        Text(verbatim: entry.id.uuidString)
-                            .font(.caption2).foregroundColor(.secondary).lineLimit(1)
-                    }
-                    Spacer()
-                    trailing()
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel(Text(verbatim: accessibilityLabel ?? entry.displayName))
-
-            Button(action: onInfo) {
-                Image(systemName: "info.circle").foregroundColor(.accentColor)
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel(L10n.DeviceInfo.info)
-        }
-    }
-}
 
 struct DeviceEntry: Identifiable, Equatable {
     let id: UUID
     let name: String
     let isNamed: Bool
-    let rssi: Int
-    let advertisedServices: [CBUUID]
-    let companyID: UInt16?
-    let txPower: Int?
-    let isConnectable: Bool?
-    let isHostConnected: Bool
-    let isCentralConnected: Bool
-    let isConnecting: Bool
     let isSubscribed: Bool
     /// holds control: the one host that receives input
     let isActive: Bool
@@ -56,24 +12,16 @@ struct DeviceEntry: Identifiable, Equatable {
     /// removed by the user; stays linked, but needs a restore before it can be used again
     let isRemoved: Bool
 
-    var isLive: Bool {
-        isCentralConnected || (isHostConnected && isActive)
-    }
-
-    var manufacturer: String? {
-        companyID.flatMap { BluetoothNumbers.company($0) }
-    }
-
     var displayName: String {
         if isNamed {
             return name
         }
-        return "[\(manufacturer ?? L10n.Device.unknownManufacturer)]"
+        return L10n.Device.unknownName
     }
 }
 
 struct RowLeadingStatus: View {
-    enum Phase { case idle, connecting, active }
+    enum Phase { case idle, active }
     let phase: Phase
 
     var body: some View {
@@ -81,8 +29,6 @@ struct RowLeadingStatus: View {
             switch phase {
             case .idle:
                 Color.clear
-            case .connecting:
-                ProgressView()
             case .active:
                 Image(systemName: "checkmark")
                     .font(.body.weight(.semibold))

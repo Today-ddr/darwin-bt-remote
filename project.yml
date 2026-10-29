@@ -28,8 +28,6 @@ targets:
     resources:
       - BTRemote/Assets.xcassets
       - BTRemote/PrivacyInfo.xcprivacy
-      - BTRemote/Resources/company_ids.json
-      - BTRemote/Resources/service_uuids.json
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.jqssun.btremote

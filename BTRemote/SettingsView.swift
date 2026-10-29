@@ -158,7 +158,6 @@ struct SettingsView: View {
     #Preview {
         SettingsView()
             .environmentObject(HIDPeripheral())
-            .environmentObject(HIDCentral())
             .environmentObject(DeviceNameStore())
     }
 #endif

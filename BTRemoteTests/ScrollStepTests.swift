@@ -66,12 +66,9 @@ final class ScrollStepTests: XCTestCase {
         HIDInput(
             sendMouse: record,
             sendKeyboard: { _ in },
-            sendConsumer: { _ in },
-            sendDigitizer: { _ in },
             updateBattery: { _ in },
             isActive: true,
             isConnected: true,
-            connectedHostCount: 1,
             activeError: nil,
             batteryLevel: 100
         )

@@ -1,23 +1,6 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "action.done": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Done"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "完成"
-          }
-        }
-      }
-    },
     "action.not_now": {
       "extractionState": "manual",
       "localizations": {
@@ -31,57 +14,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "稍后"
-          }
-        }
-      }
-    },
-    "action.remove_all_services": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Remove All Services"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "移除所有服务"
-          }
-        }
-      }
-    },
-    "action.scan_nearby_devices": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Scan"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "扫描"
-          }
-        }
-      }
-    },
-    "action.settings": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Settings"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "设置"
           }
         }
       }
@@ -116,23 +48,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "停止广播"
-          }
-        }
-      }
-    },
-    "action.stop_scanning": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stop Scanning"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "停止扫描"
           }
         }
       }
@@ -184,40 +99,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "BTRemote"
-          }
-        }
-      }
-    },
-    "bluetooth.provider_name": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "BTRemote"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "BTRemote"
-          }
-        }
-      }
-    },
-    "bluetooth.service_description": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Keyboard and Mouse"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "键盘和鼠标"
           }
         }
       }
@@ -341,74 +222,6 @@
         }
       }
     },
-    "device.connect_accessibility_label": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connect to %@"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "连接到 %@"
-          }
-        }
-      }
-    },
-    "device.connected_legend": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "✓ indicates the device is connected."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "✓ 表示设备已连接。"
-          }
-        }
-      }
-    },
-    "device.disconnect_accessibility_label": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Disconnect from %@"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "断开与 %@ 的连接"
-          }
-        }
-      }
-    },
-    "device.empty_state": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No devices found."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "未发现设备。"
-          }
-        }
-      }
-    },
     "device.inactive": {
       "extractionState": "manual",
       "localizations": {
@@ -443,40 +256,6 @@
         }
       }
     },
-    "device.rssi_format": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%d dBm"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%d dBm"
-          }
-        }
-      }
-    },
-    "device.unknown_manufacturer": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Unknown"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "未知"
-          }
-        }
-      }
-    },
     "device.unknown_name": {
       "extractionState": "manual",
       "localizations": {
@@ -490,40 +269,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "未知设备"
-          }
-        }
-      }
-    },
-    "device_info.advertisement": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Advertisement"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "广播数据"
-          }
-        }
-      }
-    },
-    "device_info.connectable": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connectable"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "可连接"
           }
         }
       }
@@ -596,23 +341,6 @@
         }
       }
     },
-    "device_info.manufacturer": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Manufacturer"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "制造商"
-          }
-        }
-      }
-    },
     "device_info.name": {
       "extractionState": "manual",
       "localizations": {
@@ -626,57 +354,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "名称"
-          }
-        }
-      }
-    },
-    "device_info.remove_services_hint": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Removes all published HID services and drops every connected host. Tap Start Advertising to republish."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "移除所有已发布的 HID 服务，并断开所有已连接的主机。点按“开始广播”可重新发布。"
-          }
-        }
-      }
-    },
-    "device_info.services": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Advertised Services"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "广播的服务"
-          }
-        }
-      }
-    },
-    "device_info.signal": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Signal"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "信号"
           }
         }
       }
@@ -698,142 +375,6 @@
         }
       }
     },
-    "device_info.tx_power": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "TX Power"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "发射功率"
-          }
-        }
-      }
-    },
-    "error.device_not_paired": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ is not paired. Pair it from System Settings first."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ 尚未配对。请先在“系统设置”中配对。"
-          }
-        }
-      }
-    },
-    "error.failed_to_connect": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Failed to connect: %@"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "连接失败：%@"
-          }
-        }
-      }
-    },
-    "error.open_connection_failed": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Failed to open ACL connection (%@)."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "无法建立 ACL 连接（%@）。"
-          }
-        }
-      }
-    },
-    "error.open_l2cap_failed": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Failed to open L2CAP channel PSM 0x%04X (%@)."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "无法打开 L2CAP 通道 PSM 0x%04X（%@）。"
-          }
-        }
-      }
-    },
-    "error.peripheral_not_retained": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Peripheral %@ is no longer available to iOS."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "外设 %@ 对 iOS 已不再可用。"
-          }
-        }
-      }
-    },
-    "error.sdp_publish_failed": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Failed to publish Bluetooth HID service record."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "无法发布蓝牙 HID 服务记录。"
-          }
-        }
-      }
-    },
-    "error.write_failed": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Failed to send HID report (%@)."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "发送 HID 报告失败（%@）。"
-          }
-        }
-      }
-    },
     "keyboard.alt": {
       "extractionState": "manual",
       "localizations": {
@@ -847,23 +388,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Alt"
-          }
-        }
-      }
-    },
-    "keyboard.alt_gr": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Alt Gr"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Alt Gr"
           }
         }
       }
@@ -885,40 +409,6 @@
         }
       }
     },
-    "keyboard.arrows": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Arrow keys"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "方向键"
-          }
-        }
-      }
-    },
-    "keyboard.clear": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Clear"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "清空"
-          }
-        }
-      }
-    },
     "keyboard.ctrl": {
       "extractionState": "manual",
       "localizations": {
@@ -932,23 +422,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ctrl"
-          }
-        }
-      }
-    },
-    "keyboard.done": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Done"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "完成"
           }
         }
       }
@@ -1021,23 +494,6 @@
         }
       }
     },
-    "keyboard.live_typing": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Live typing"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "实时输入"
-          }
-        }
-      }
-    },
     "keyboard.meta": {
       "extractionState": "manual",
       "localizations": {
@@ -1055,40 +511,6 @@
         }
       }
     },
-    "keyboard.print_screen": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PrtSc"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PrtSc"
-          }
-        }
-      }
-    },
-    "keyboard.prompt": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Type to send to the device"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "输入内容以发送到设备"
-          }
-        }
-      }
-    },
     "keyboard.right": {
       "extractionState": "manual",
       "localizations": {
@@ -1102,23 +524,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "右"
-          }
-        }
-      }
-    },
-    "keyboard.send": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Send"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "发送"
           }
         }
       }
@@ -1242,125 +647,6 @@
         }
       }
     },
-    "media.fast_forward": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Forward"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "快进"
-          }
-        }
-      }
-    },
-    "media.mute": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mute"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "静音"
-          }
-        }
-      }
-    },
-    "media.play_pause": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Play or Pause"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "播放/暂停"
-          }
-        }
-      }
-    },
-    "media.rewind": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rewind"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "快退"
-          }
-        }
-      }
-    },
-    "media.volume_down": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Volume Down"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "音量减"
-          }
-        }
-      }
-    },
-    "media.volume_up": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Volume Up"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "音量加"
-          }
-        }
-      }
-    },
-    "mouse.button.left": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Left"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "左键"
-          }
-        }
-      }
-    },
     "mouse.button.middle": {
       "extractionState": "manual",
       "localizations": {
@@ -1374,23 +660,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "中键"
-          }
-        }
-      }
-    },
-    "mouse.button.right": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Right"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "右键"
           }
         }
       }
@@ -1425,142 +694,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "向上滚动"
-          }
-        }
-      }
-    },
-    "remote.back": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Back"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "返回"
-          }
-        }
-      }
-    },
-    "remote.channel_down": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Channel Down"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "频道 -"
-          }
-        }
-      }
-    },
-    "remote.channel_up": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Channel Up"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "频道 +"
-          }
-        }
-      }
-    },
-    "remote.closed_captions": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Closed Captions"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "隐藏字幕"
-          }
-        }
-      }
-    },
-    "remote.down": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Down"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "下"
-          }
-        }
-      }
-    },
-    "remote.home": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Home"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "主页"
-          }
-        }
-      }
-    },
-    "remote.left": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Left"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "左"
-          }
-        }
-      }
-    },
-    "remote.menu": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Menu"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "菜单"
           }
         }
       }
@@ -1616,74 +749,6 @@
         }
       }
     },
-    "remote.power": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Power"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "电源"
-          }
-        }
-      }
-    },
-    "remote.right": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Right"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "右"
-          }
-        }
-      }
-    },
-    "remote.select": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Select"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "确定"
-          }
-        }
-      }
-    },
-    "remote.up": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Up"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "上"
-          }
-        }
-      }
-    },
     "section.battery": {
       "extractionState": "manual",
       "localizations": {
@@ -1718,23 +783,6 @@
         }
       }
     },
-    "section.devices": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Devices"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "设备"
-          }
-        }
-      }
-    },
     "section.last_error": {
       "extractionState": "manual",
       "localizations": {
@@ -1748,23 +796,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "最近错误"
-          }
-        }
-      }
-    },
-    "section.paired_devices": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Paired Devices"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已配对设备"
           }
         }
       }
@@ -2024,40 +1055,6 @@
         }
       }
     },
-    "setup.bluetooth_off_message": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bluetooth must be on to proceed. Enable it and try again."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "必须开启蓝牙才能继续。请开启后重试。"
-          }
-        }
-      }
-    },
-    "setup.bluetooth_off_title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Turn On Bluetooth"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "开启蓝牙"
-          }
-        }
-      }
-    },
     "setup.advertised_name": {
       "extractionState": "manual",
       "localizations": {
@@ -2126,23 +1123,6 @@
         }
       }
     },
-    "setup.connect_from_this_app": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connect from this application"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "从本应用发起连接"
-          }
-        }
-      }
-    },
     "setup.find_guide_hint": {
       "extractionState": "manual",
       "localizations": {
@@ -2156,57 +1136,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "你可以在“引导”标签页顶部找到本指南。"
-          }
-        }
-      }
-    },
-    "setup.from_app": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Apple devices (same Apple Account)"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Apple 设备（同一 Apple 账户）"
-          }
-        }
-      }
-    },
-    "setup.from_app_step1": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tap \"Scan\" under Devices."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "点按“设备”下的“扫描”。"
-          }
-        }
-      }
-    },
-    "setup.from_app_step2": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tap the device to connect. You may also identify a device by using the information button."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "点按要连接的设备。你也可以通过信息按钮来识别设备。"
           }
         }
       }
@@ -2296,23 +1225,6 @@
         }
       }
     },
-    "setup.icloud_paired": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Devices paired over iCloud will not show up in iOS Settings > Bluetooth."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "通过 iCloud 配对的设备不会显示在 iOS“设置 > 蓝牙”中。"
-          }
-        }
-      }
-    },
     "setup.le_guide": {
       "extractionState": "manual",
       "localizations": {
@@ -2364,74 +1276,6 @@
         }
       }
     },
-    "sort.ascending": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ascending"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "升序"
-          }
-        }
-      }
-    },
-    "sort.descending": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Descending"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "降序"
-          }
-        }
-      }
-    },
-    "sort.direction": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Order"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "排序方式"
-          }
-        }
-      }
-    },
-    "sort.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sort"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "排序"
-          }
-        }
-      }
-    },
     "status.advertising": {
       "extractionState": "manual",
       "localizations": {
@@ -2462,23 +1306,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "蓝牙"
-          }
-        }
-      }
-    },
-    "status.connected_peripherals": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connected Peripherals"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已连接的外设"
           }
         }
       }
@@ -2547,40 +1374,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "已订阅的中央设备"
-          }
-        }
-      }
-    },
-    "tab.keyboard": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Keyboard"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "键盘"
-          }
-        }
-      }
-    },
-    "tab.remote": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Remote"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "遥控"
           }
         }
       }
@@ -2738,40 +1531,6 @@
         }
       }
     },
-    "remote.mode": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mode"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "模式"
-          }
-        }
-      }
-    },
-    "keyboard.delete_forward": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Delete"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "删除"
-          }
-        }
-      }
-    },
     "keyboard.caps_lock": {
       "extractionState": "manual",
       "localizations": {
@@ -2785,40 +1544,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "大写锁定"
-          }
-        }
-      }
-    },
-    "keyboard.full_keyboard": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Combo"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "键鼠"
-          }
-        }
-      }
-    },
-    "keyboard.trackpad": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Trackpad"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "触控板"
           }
         }
       }
@@ -3435,23 +2160,6 @@
         }
       }
     },
-    "gesture.double_tap_drag_hint": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tap twice quickly and hold to drag. Turn off if it interferes with single clicks."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "快速双击并按住即可拖动。若影响单击操作，请关闭此项。"
-          }
-        }
-      }
-    },
     "gesture.long_press_drag": {
       "extractionState": "manual",
       "localizations": {
@@ -3788,23 +2496,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "恢复"
-          }
-        }
-      }
-    },
-    "keyboard.toggle_onscreen_keyboard": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show or hide the onscreen keyboard"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "显示或隐藏屏幕键盘"
           }
         }
       }

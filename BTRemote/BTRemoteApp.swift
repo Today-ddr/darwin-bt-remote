@@ -5,7 +5,6 @@ import UIKit
 struct BTRemoteApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var lowEnergy = HIDPeripheral()
-    @StateObject private var central = HIDCentral()
 
     /// Declared outside any tab on purpose: advertising is what wakes paired
     /// hosts, so it does not belong to whichever page is on screen. Off unless
@@ -53,7 +52,7 @@ struct BTRemoteApp: App {
     }
 
     private var hid: HIDInput {
-        HIDInput.make(lowEnergy: lowEnergy, central: central)
+        HIDInput.make(lowEnergy: lowEnergy)
     }
 
     /// The scene leaving the foreground suspends the peripheral, and coming back resumes
@@ -94,13 +93,11 @@ struct BTRemoteApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(lowEnergy)
-                .environmentObject(central)
                 .environmentObject(deviceNames)
                 .environment(\.hid, hid)
                 .environment(\.appTheme, theme)
                 .preferredColorScheme(theme.preferredColorScheme)
                 .onAppear {
-                    central.start()
                     // with the preference off nothing is advertised, but the radio is
                     // still read so Setup shows the real Bluetooth state instead of
                     // "unknown" — `observeState` installs no services and starts no

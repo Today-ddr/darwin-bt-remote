@@ -5,10 +5,6 @@ struct GuideView: View {
 
     var body: some View {
         Form {
-            Section(header: header(L10n.Setup.fromApp, L10n.Setup.connectFromThisApp), footer: Text(L10n.Setup.iCloudPaired)) {
-                step("1.circle", L10n.Setup.fromAppStep1)
-                step("2.circle", L10n.Setup.fromAppStep2)
-            }
             Section(header: header(L10n.Setup.fromDevice, L10n.Setup.connectFromTargetDevice), footer: fromDeviceFooter) {
                 step("1.circle", L10n.Setup.fromDeviceStep1)
                 step("2.circle", Text(verbatim: L10n.Setup.fromDeviceStep2(advertisedName)))

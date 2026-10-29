@@ -3,7 +3,6 @@ import SwiftUI
 
 struct SetupView: View {
     @EnvironmentObject private var lowEnergy: HIDPeripheral
-    @EnvironmentObject private var central: HIDCentral
     @EnvironmentObject private var names: DeviceNameStore
     @AppStorage(AppSettings.developerModeKey) private var developerMode = false
     @AppStorage(AppSettings.advertisedNameKey) private var advertisedName = L10n.Bluetooth.advertisedName
@@ -67,7 +66,6 @@ struct SetupView: View {
             if developerMode {
                 row(L10n.Status.hidService, Text(lowEnergy.isHIDServiceAdded ? L10n.Status.hidServiceAdded : L10n.Value.none))
                 row(L10n.Status.subscribedCentrals, Text(lowEnergy.subscribedCentrals.count, format: .number))
-                row(L10n.Status.connectedPeripherals, Text(central.connected.count, format: .number))
                 row(L10n.Status.hostLEDs, Text(verbatim: lowEnergy.keyboardLEDs.localizedLabel))
             }
         }
@@ -112,15 +110,7 @@ struct SetupView: View {
                     Label(L10n.Action.startAdvertising, systemImage: "antenna.radiowaves.left.and.right")
                 }
             }
-            NavigationLink {
-                DeviceListView()
-            } label: {
-                Label(L10n.Section.devices, systemImage: "dot.radiowaves.left.and.right")
-            }
         }
-        .onAppear(perform: _seedAliasesFromScan)
-        .onChange(of: lowEnergy.connectedCentrals) { _ in _seedAliasesFromScan() }
-        .onChange(of: central.discovered) { _ in _seedAliasesFromScan() }
     }
 
     private var connectedDevicesSection: some View {
@@ -142,14 +132,6 @@ struct SetupView: View {
                     id: uuid,
                     name: alias ?? "",
                     isNamed: alias != nil,
-                    rssi: 0,
-                    advertisedServices: [],
-                    companyID: nil,
-                    txPower: nil,
-                    isConnectable: nil,
-                    isHostConnected: true,
-                    isCentralConnected: false,
-                    isConnecting: false,
                     isSubscribed: subscribed,
                     isActive: subscribed && lowEnergy.activeCentral == uuid,
                     isMuted: lowEnergy.inactiveCentrals.contains(uuid),
@@ -157,13 +139,6 @@ struct SetupView: View {
                 )
             }
             .sorted { $0.id.uuidString < $1.id.uuidString }
-    }
-
-    private func _seedAliasesFromScan() {
-        for uuid in lowEnergy.connectedCentrals where names.name(for: uuid) == nil {
-            guard let scanned = central.discovered.first(where: { $0.id == uuid && $0.isNamed })?.name else { continue }
-            names.setName(scanned, for: uuid)
-        }
     }
 
     private func _startAdvertising() {
@@ -231,7 +206,6 @@ private extension KeyboardLEDs {
     #Preview {
         SetupView()
             .environmentObject(HIDPeripheral())
-            .environmentObject(HIDCentral())
             .environmentObject(DeviceNameStore())
     }
 #endif

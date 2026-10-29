@@ -61,10 +61,6 @@ enum L10n {
             "section.connection"
         }
 
-        static var devices: LocalizedStringKey {
-            "section.devices"
-        }
-
         static var battery: LocalizedStringKey {
             "section.battery"
         }
@@ -89,10 +85,6 @@ enum L10n {
 
         static var subscribedCentrals: LocalizedStringKey {
             "status.subscribed_centrals"
-        }
-
-        static var connectedPeripherals: LocalizedStringKey {
-            "status.connected_peripherals"
         }
 
         static var hostLEDs: LocalizedStringKey {
@@ -127,52 +119,14 @@ enum L10n {
             "action.stop_advertising"
         }
 
-        static var scanNearbyDevices: LocalizedStringKey {
-            "action.scan_nearby_devices"
-        }
-
-        static var stopScanning: LocalizedStringKey {
-            "action.stop_scanning"
-        }
-
         static var notNow: LocalizedStringKey {
             "action.not_now"
-        }
-
-        static var done: LocalizedStringKey {
-            "action.done"
-        }
-    }
-
-    enum Sort {
-        static var title: LocalizedStringKey {
-            "sort.title"
-        }
-
-        static var direction: LocalizedStringKey {
-            "sort.direction"
-        }
-
-        static var ascending: LocalizedStringKey {
-            "sort.ascending"
-        }
-
-        static var descending: LocalizedStringKey {
-            "sort.descending"
         }
     }
 
     enum Device {
-        static var emptyState: LocalizedStringKey {
-            "device.empty_state"
-        }
-
         static var unknownName: String {
             String(localized: "device.unknown_name")
-        }
-
-        static var unknownManufacturer: String {
-            String(localized: "device.unknown_manufacturer")
         }
 
         static var inactive: LocalizedStringKey {
@@ -181,10 +135,6 @@ enum L10n {
 
         static var notSubscribed: LocalizedStringKey {
             "device.not_subscribed"
-        }
-
-        static var connectedLegend: LocalizedStringKey {
-            "device.connected_legend"
         }
 
         static var remove: LocalizedStringKey {
@@ -217,27 +167,6 @@ enum L10n {
 
         static var restore: LocalizedStringKey {
             "device.restore"
-        }
-
-        static func rssi(_ value: Int) -> String {
-            String.localizedStringWithFormat(
-                String(localized: "device.rssi_format"),
-                value
-            )
-        }
-
-        static func connectAccessibilityLabel(_ name: String) -> String {
-            String.localizedStringWithFormat(
-                String(localized: "device.connect_accessibility_label"),
-                name
-            )
-        }
-
-        static func disconnectAccessibilityLabel(_ name: String) -> String {
-            String.localizedStringWithFormat(
-                String(localized: "device.disconnect_accessibility_label"),
-                name
-            )
         }
     }
 }
