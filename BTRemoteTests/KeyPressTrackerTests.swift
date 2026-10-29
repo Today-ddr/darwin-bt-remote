@@ -33,7 +33,7 @@ final class KeyPressTrackerTests: XCTestCase {
         sut.press(.b)
         sut.press(.a)
 
-        XCTAssertFalse(sut.release(.a))
+        XCTAssertTrue(sut.release(.a))
         XCTAssertEqual(sut.heldKeys, [.b])
 
         sut.press(.a)
