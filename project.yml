@@ -64,3 +64,14 @@ schemes:
       gatherCoverageData: true
       targets:
         - BTRemoteTests
+  # Dedicated test scheme so CI can run the unit tests without building the
+  # archive scheme.
+  BTRemoteTests:
+    build:
+      targets:
+        BTRemote: all
+        BTRemoteTests: [test]
+    test:
+      config: Debug
+      targets:
+        - BTRemoteTests

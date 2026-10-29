@@ -49,6 +49,19 @@ jobs:
             echo "Not a release tag ($TAG); using project.yml's version."
           fi
 
+      # XCTest is only executable on a machine with full Xcode, so CI is the
+      # automation gate for the unit tests; the IPA build alone only proves the
+      # app compiles.
+      - name: Run unit tests
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project BTRemote.xcodeproj \
+            -scheme BTRemoteTests \
+            -destination "platform=iOS Simulator,name=iPhone 16 Pro,OS=latest" \
+            -derivedDataPath .build/DerivedData \
+            | xcbeautify
+
       - name: Build iOS IPA
         run: |
           set -o pipefail
