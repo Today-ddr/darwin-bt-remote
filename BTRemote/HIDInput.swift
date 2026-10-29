@@ -88,6 +88,11 @@ enum Haptics {
     enum Source {
         case trackpad
         case keyboard
+        /// Navigation feedback — a page or tab change. It belongs to neither input
+        /// surface, so it follows only the master haptics switch: turning the
+        /// keyboard or trackpad feedback off must not make the app's own controls
+        /// feel dead.
+        case interface
     }
 
     /// How firm the feedback feels, persisted as `hapticsIntensityKey`.
@@ -161,6 +166,7 @@ enum Haptics {
         switch source {
         case .trackpad: return defaults.bool(forKey: AppSettings.hapticsTrackpadKey)
         case .keyboard: return defaults.bool(forKey: AppSettings.hapticsKeyboardKey)
+        case .interface: return true
         }
     }
 

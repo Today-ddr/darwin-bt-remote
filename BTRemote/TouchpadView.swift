@@ -18,10 +18,10 @@ import UIKit
 /// Ownership rule: scroll, pinch and rotation all key off two fingers, yet
 /// only one of them may act on a given pair of touches. A two-finger pan
 /// claims the touches as soon as it begins and keeps them until every touch
-/// lifts; a pinch (or rotation) may claim them only while no pan is live and
-/// only once its finger separation has changed enough, for long enough, to be
-/// unmistakably a pinch. First claim wins and is never stolen mid-flight, so
-/// an accidental pinch can no longer interrupt a scroll. See `Coordinator`.
+/// lifts; a pinch or a rotation is decided before scroll, so it may take the
+/// touches only once its separation change or its turn has been sustained for
+/// long enough to be unmistakable. Between pinch and rotation, whichever
+/// latches first wins, and a claim is never stolen mid-flight. See `Coordinator`.
 struct TouchpadView: UIViewRepresentable {
     var moveSensitivity: CGFloat
     var scrollSensitivity: CGFloat
@@ -71,12 +71,15 @@ struct TouchpadView: UIViewRepresentable {
         longPress.allowableMovement = LongPressDragPolicy.allowableMovement
         longPress.numberOfTouchesRequired = 1
         longPress.delegate = c
+        longPress.isEnabled = longPressDragEnabled
 
         let left = UITapGestureRecognizer(target: c, action: #selector(Coordinator.handleLeft(_:)))
         left.numberOfTouchesRequired = 1
         left.delegate = c
         // A recognized long press suppresses the tap structurally: UIKit fails the
         // tap when the long press wins, so a long-press drag never also left-clicks.
+        // When long-press drag is off the recognizer is disabled outright, so it
+        // cannot sit in front of the tap and a deliberately slow tap still clicks.
         left.require(toFail: longPress)
 
         let right = UITapGestureRecognizer(target: c, action: #selector(Coordinator.handleRight))
@@ -134,6 +137,7 @@ struct TouchpadView: UIViewRepresentable {
         c.scrollRecognizer = scroll
         c.pinchRecognizer = pinch
         c.rotationRecognizer = rotation
+        c.longPressRecognizer = longPress
 
         [
             move,
@@ -170,6 +174,7 @@ struct TouchpadView: UIViewRepresentable {
         c.invertScroll = invertScroll
         c.doubleTapDragEnabled = doubleTapDragEnabled
         c.longPressDragEnabled = longPressDragEnabled
+        c.longPressRecognizer?.isEnabled = longPressDragEnabled
         c.onMove = onMove
         c.onScroll = onScroll
         c.onLeftClick = onLeftClick
@@ -209,6 +214,11 @@ struct TouchpadView: UIViewRepresentable {
         weak var scrollRecognizer: UIPanGestureRecognizer?
         weak var pinchRecognizer: UIPinchGestureRecognizer?
         weak var rotationRecognizer: UIRotationGestureRecognizer?
+        /// Held so `updateUIView` can enable or disable the drag path without
+        /// rebuilding the surface. Disabled is the only state in which the
+        /// recognizer must not begin: while it is installed and enabled, the tap
+        /// waits for it to fail.
+        weak var longPressRecognizer: UILongPressGestureRecognizer?
 
         private var scrollAccumulator: CGFloat = 0
         private let scrollStep: CGFloat = 6
@@ -228,6 +238,7 @@ struct TouchpadView: UIViewRepresentable {
             case idle
             case scroll
             case pinch
+            case rotation
         }
 
         /// How far the mean finger separation must move, relative to the
@@ -255,6 +266,29 @@ struct TouchpadView: UIViewRepresentable {
         /// gesture: the moment a pinch has proved itself it owns the touches.
         private var pinchHasLatched = false
 
+        // MARK: Rotation latch
+
+        /// How far the touches must have turned, in total, before a rotation may
+        /// own them. A two-finger scroll barely rotates at all — a few degrees
+        /// over its whole travel — while a deliberate turn clears 20° without
+        /// effort, so the threshold is far outside scroll noise.
+        private static let rotationLatchAngle: CGFloat = 0.35
+        /// …and the turn must be *sustained*: this many consecutive updates have
+        /// to carry real movement before the total is trusted. A single jump in
+        /// the rotation estimate cannot latch it.
+        private static let rotationLatchEvents = 3
+        /// Per-update movement below which the streak resets, so only consecutive
+        /// updates count.
+        private static let rotationNoiseAngle: CGFloat = 0.002
+        /// Signed total of the turn so far. The sign is what the action reads, so
+        /// a hand that wobbles back and forth does not latch on accumulated noise.
+        private var rotationAngleAccumulator: CGFloat = 0
+        private var rotationLatchStreak = 0
+        /// Set once the rotation has proved itself, and held for the rest of the
+        /// gesture: the rotation acts once, at the moment it latches, and no later
+        /// update can fire it again.
+        private var rotationHasLatched = false
+
         // MARK: Ownership
 
         /// True while a two-finger pan is running — i.e. while the touches have
@@ -266,23 +300,24 @@ struct TouchpadView: UIViewRepresentable {
 
         /// The ownership rule, in one place:
         ///
-        /// 1. Whichever gesture proves itself first owns the touches, and
-        ///    keeps them until every touch lifts. A pan proves itself by
-        ///    beginning (finger travel); a pinch proves itself by sustaining a
-        ///    separation change (`pinchLatchEvents` consecutive updates past
-        ///    `pinchLatchRatio`).
-        /// 2. Nothing may take the touches from a gesture that already owns
-        ///    them, so a scroll can no longer be interrupted by an accidental
-        ///    pinch, and a deliberate pinch can no longer be interrupted by
-        ///    the slight drift of two fingers.
-        /// 3. While the owner is still undecided, nothing acts on the touches.
-        ///
-        /// The latching run is frozen while a pan is running, so a scroll can
-        /// never accumulate its way into a pinch: the freeze is what makes
-        /// "first to prove itself wins" safe in both directions.
+        /// 1. A pinch or a rotation outranks a pan once it has latched. A pinch
+        ///    only accumulates while no pan is live, as before: a scroll never
+        ///    accumulates its way into a pinch, and a pinch that latched in the
+        ///    first frames keeps the touches when the pan begins. A rotation keeps
+        ///    accumulating through a live pan, because scroll drift can never reach
+        ///    its threshold and a deliberate turn must be able to take over.
+        /// 2. Between pinch and rotation, whichever latches first owns the touches
+        ///    for the rest of the gesture; the other stops accumulating.
+        /// 3. Once a gesture owns the touches, nothing else may act on them until
+        ///    every touch lifts.
+        /// 4. While the owner is still undecided, only scroll may act; a rotation
+        ///    that has not latched sends nothing.
         private func twoFingerOwner() -> TwoFingerOwner {
             if pinchHasLatched {
                 return .pinch
+            }
+            if rotationHasLatched {
+                return .rotation
             }
             if isScrolling {
                 return .scroll
@@ -304,12 +339,14 @@ struct TouchpadView: UIViewRepresentable {
         }
 
         /// Advances the pinch latch, and answers whether the pinch may act.
-        /// Nothing accumulates while a pan is live, so no amount of
-        /// two-finger scrolling can ever latch a pinch.
+        /// Nothing accumulates while a pan is live, so no amount of two-finger
+        /// scrolling can ever latch a pinch; the latch survives the pan's end now
+        /// that the scroll recognizer only resets its own state.
         private func pinchIsSustained(_ pinch: UIPinchGestureRecognizer) -> Bool {
             if pinchHasLatched {
                 return true
             }
+            guard !rotationHasLatched else { return false }
             guard !isScrolling else { return false }
             // Exactly two fingers: three- and four-finger swipes are mapped to
             // their own actions and must not also latch a zoom.
@@ -329,36 +366,72 @@ struct TouchpadView: UIViewRepresentable {
             return pinchHasLatched
         }
 
-        /// Ends the two-finger gesture outright — no lingering lock-out. The
-        /// old code held a flag for 150ms after the fingers lifted, which is
-        /// what made the surface feel stuck between gestures.
+        /// Advances the rotation latch and, when it completes, sends the one
+        /// rotation action this gesture is allowed.
         ///
-        /// Every piece of two-finger state is in here, cancellation included:
-        /// the accumulator is what `handleScroll` carries between updates, the
-        /// baseline is what the pinch measures the spread against, and the streak and
-        /// the latch are what decide ownership. A cancelled gesture reaches this too,
-        /// through each handler's `.ended, .cancelled` case, so a latch cannot outlive
-        /// the touches that set it and block the next pair — a `pinchHasLatched` left
-        /// true would make `twoFingerOwner()` return `.pinch` forever, which reads as
-        /// a dead surface: the scroll handler's guard drops every update and the
-        /// rotation handler's `.idle` test never passes.
-        private func endTwoFingerGesture() {
+        /// Rotation used to fire whenever it was the owner and a single update
+        /// passed 0.25 rad. During the first frames of a scroll a pan has not
+        /// begun yet, so ownership was still idle and a tiny drift could send
+        /// actions before the scroll even started. Requiring several consecutive
+        /// updates and a clearly larger total turn keeps those frames quiet.
+        private func advanceRotationLatch(_ rot: UIRotationGestureRecognizer) {
+            // `rotation` is cumulative since the last reset. Taking it here and
+            // zeroing it turns each update into an increment; a gesture that ends
+            // without ever latching therefore leaves nothing behind.
+            let delta = rot.rotation
+            rot.rotation = 0
+            guard rot.numberOfTouches == 2,
+                  !rotationHasLatched,
+                  !pinchHasLatched
+            else { return }
+            rotationAngleAccumulator += delta
+            if abs(delta) > Self.rotationNoiseAngle {
+                rotationLatchStreak += 1
+            } else {
+                rotationLatchStreak = 0
+            }
+            guard rotationLatchStreak >= Self.rotationLatchEvents,
+                  abs(rotationAngleAccumulator) >= Self.rotationLatchAngle
+            else { return }
+            rotationHasLatched = true
+            onRotate(rotationAngleAccumulator)
+        }
+
+        /// Scroll state is only the accumulator `handleScroll` carries between
+        /// updates. Only the scroll recognizer's terminal event clears it.
+        private func resetScrollState() {
             scrollAccumulator = 0
+        }
+
+        /// Pinch state — the baseline it measures against, the streak and the
+        /// latch. Only the pinch recognizer's terminal event clears it, so another
+        /// gesture ending can no longer drop a live pinch's ownership.
+        private func resetPinchState() {
             pinchBaselineSeparation = nil
             pinchLatchStreak = 0
             pinchHasLatched = false
         }
 
+        /// Rotation state. Only the rotation recognizer's terminal event clears it,
+        /// so a scroll or a pinch ending cannot clear a live rotation latch.
+        private func resetRotationState() {
+            rotationAngleAccumulator = 0
+            rotationLatchStreak = 0
+            rotationHasLatched = false
+        }
+
         /// Everything the surface is holding, given up at once. Called from
         /// `dismantleUIView`, from the panel's registered release, and from the
         /// shared release coordinator: a drag in flight is released once and the
-        /// two-finger ownership is reset so the next pair of fingers starts clean.
+        /// two-finger state is reset so the next pair of fingers starts clean.
         ///
         /// Running when nothing is held is harmless: `endDrag` returns early unless a
-        /// drag is live, and the two-finger reset is assignments to defaults.
+        /// drag is live, and the two-finger resets are assignments to defaults.
         func releaseEverything() {
             endDrag()
-            endTwoFingerGesture()
+            resetScrollState()
+            resetPinchState()
+            resetRotationState()
             lastTapTime = 0
             tapSuppressDeadline = 0
         }
@@ -472,11 +545,12 @@ struct TouchpadView: UIViewRepresentable {
                 scrollAccumulator = 0
             case .changed:
                 guard let view = pan.view else { return }
-                // A pinch that latched first owns the touches, so the pan that
-                // drifts alongside it must not also scroll. The translation is
-                // still cleared so nothing is delivered late if the pan
-                // outlives the pinch.
-                guard twoFingerOwner() != .pinch else {
+                // A pinch or rotation that latched first owns the touches, so the
+                // pan that drifts alongside it must not also scroll. The
+                // translation is still cleared so nothing is delivered late if the
+                // pan outlives the claim.
+                let owner = twoFingerOwner()
+                guard owner != .pinch, owner != .rotation else {
                     pan.setTranslation(.zero, in: view)
                     return
                 }
@@ -492,7 +566,7 @@ struct TouchpadView: UIViewRepresentable {
                     Haptics.scrollTick()
                 }
             case .ended, .cancelled, .failed:
-                endTwoFingerGesture()
+                resetScrollState()
             default:
                 break
             }
@@ -523,28 +597,22 @@ struct TouchpadView: UIViewRepresentable {
                         onZoom(netDelta)
                     }
                 }
-                endTwoFingerGesture()
+                resetPinchState()
             default:
                 break
             }
         }
 
-        /// Rotation is the last resort for two-finger touches: it acts only
-        /// when no pan has begun and no pinch has latched. Its default mapping
-        /// is `none`, so an unconfigured rotation sends nothing.
+        /// Rotation outranks scroll but loses to a pinch that latched first. Its
+        /// default mapping is `none`, so an unconfigured rotation sends nothing.
         @objc func handleRotation(_ rot: UIRotationGestureRecognizer) {
             switch rot.state {
             case .began:
                 rot.rotation = 0
             case .changed:
-                guard rot.numberOfTouches == 2, twoFingerOwner() == .idle else { return }
-                let delta = rot.rotation
-                if abs(delta) > 0.25 {
-                    onRotate(delta)
-                    rot.rotation = 0
-                }
+                advanceRotationLatch(rot)
             case .ended, .cancelled, .failed:
-                endTwoFingerGesture()
+                resetRotationState()
             default:
                 break
             }
@@ -656,7 +724,7 @@ struct TouchpadView: UIViewRepresentable {
         /// separation change unless it keeps receiving updates while it is
         /// undecided, and it cannot do that if a pan alongside it has shut it
         /// down. Ownership is therefore decided by the rule in
-        /// `twoFingerOwner()`, which all three handlers consult — not by
+        /// `twoFingerOwner()`, which every two-finger handler consults — not by
         /// refusing gestures here.
         nonisolated func gestureRecognizer(
             _ gestureRecognizer: UIGestureRecognizer,
@@ -666,10 +734,18 @@ struct TouchpadView: UIViewRepresentable {
         }
 
         /// Five-finger gestures are out of scope; no recognizer may begin with more
-        /// than four touches even if the hardware can report them.
+        /// than four touches even if the hardware can report them. The long-press
+        /// drag recognizer is also refused while the setting is off, so the tap it
+        /// is ordered before cannot be held up by a recognizer that must not act.
         nonisolated func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
             MainActor.assumeIsolated {
-                gestureRecognizer.numberOfTouches <= TrackpadGestureLimits.maximumFingerCount
+                guard gestureRecognizer.numberOfTouches <= TrackpadGestureLimits.maximumFingerCount else {
+                    return false
+                }
+                if gestureRecognizer === longPressRecognizer, !longPressDragEnabled {
+                    return false
+                }
+                return true
             }
         }
     }

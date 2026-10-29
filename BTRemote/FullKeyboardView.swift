@@ -70,14 +70,16 @@ struct FullKeyboardView: View {
             .ignoresSafeArea(.container, edges: .horizontal)
         }
         // last line of defence: nothing is touching the surface, so nothing may stay held.
-        // This fires now that `KeyTouchCount` publishes its value. Releasing twice is
-        // harmless: the tracker is already empty, so the second call changes nothing.
-        .onChange(of: surfaceTouches.value) { count in
-            if count == 0 {
+        // `isIdle` is the only thing `KeyTouchCount` publishes, so this does not re-run
+        // for every finger count that stays on the surface. Releasing twice is harmless:
+        // the tracker is already empty, so the second call changes nothing.
+        .onChange(of: surfaceTouches.isIdle) { isIdle in
+            if isIdle {
                 releaseEverything()
             }
         }
         .onAppear {
+            guard releaseToken == nil else { return }
             releaseToken = releases.register { releaseEverything() }
         }
         .onDisappear {

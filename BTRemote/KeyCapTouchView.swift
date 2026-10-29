@@ -6,21 +6,24 @@ import SwiftUI
 /// `FullKeyboardView` all count the same fingers. Zero is the floor below which nothing on
 /// the surface can legitimately still be held.
 ///
-/// An `ObservableObject` so the count is one the UI can actually observe: the last line of
-/// defence in `FullKeyboardView` hangs off `onChange(of: surfaceTouches.value)`, SwiftUI
-/// only re-evaluates that when the value it read is published, and a plain stored property
-/// publishes nothing. The observer has to be a `@StateObject` to receive it — a `@State`
-/// holding the same object keeps it alive but never re-reads it. The counts arrive from UIKit
-/// touch callbacks on the main thread, so the main-actor isolation is what those callbacks
-/// already run under, and `@Published` does the change notification from there.
+/// Only `isIdle` is published, not the count itself. Every touch callback changes the
+/// count, and publishing it re-ran the whole keyboard body on every finger down and up;
+/// the view's only question is whether the surface has returned to zero, so `isIdle`
+/// changes exactly on the 0↔non-zero boundary and nothing in between. `value` stays
+/// readable for tests and for callers that need the total, but changing it alone is not
+/// a SwiftUI update.
 @MainActor
 final class KeyTouchCount: ObservableObject {
-    @Published private(set) var value = 0
+    @Published private(set) var isIdle = true
+    private(set) var value = 0
 
     /// A finger landed; returns the new total.
     @discardableResult
     func touchDown() -> Int {
         value += 1
+        if value == 1, isIdle {
+            isIdle = false
+        }
         return value
     }
 
@@ -28,6 +31,9 @@ final class KeyTouchCount: ObservableObject {
     @discardableResult
     func touchUp() -> Int {
         value = max(0, value - 1)
+        if value == 0, !isIdle {
+            isIdle = true
+        }
         return value
     }
 }
@@ -56,20 +62,6 @@ struct KeyCapTouchView: UIViewRepresentable {
     /// itself, that layer would call the surface empty while a key still had a finger
     /// down, and clear the key. The shared count is what knows better.
     var tracksSurface = false
-    /// The part of the layer's frame that may take a touch, in the layer's own
-    /// coordinates. `nil` (the default) is the whole frame — every key cap and every
-    /// rectangular hold button — and the keys are why it stays the default: they tile the
-    /// surface without overlapping, so a frame is already the right region and nothing
-    /// about them changes here.
-    ///
-    /// A control that is *not* a rectangle has to say where it is, because four or five of
-    /// them are routinely stacked in one `ZStack` with identical frames — the D-pad's four
-    /// arcs and its centre button do exactly that. Frame-based hit testing would let only
-    /// the topmost one ever be pressed, and its neighbours would be dead. The layer tests
-    /// this region in `point(inside:with:)`, so UIKit's own hit testing lands on the one
-    /// layer whose region contains the point and the others decline it. The region is the
-    /// same path the control draws, so the two cannot disagree about where the control is.
-    var region: (@Sendable (CGRect) -> Path)?
 
     func makeUIView(context: Context) -> TouchView {
         let view = TouchView()
@@ -77,9 +69,12 @@ struct KeyCapTouchView: UIViewRepresentable {
         // the labelled key underneath stays the accessible element
         view.isAccessibilityElement = false
         view.accessibilityElementsHidden = true
+        // A cap shares its surface with every other cap: two fingers landing on two
+        // keys at once are two independent presses, not one touch delivered to one view.
+        view.isMultipleTouchEnabled = true
         view.bind(
             touches: touches, onFirstTouch: onFirstTouch, onLastTouch: onLastTouch,
-            tracksSurface: tracksSurface, region: region
+            tracksSurface: tracksSurface
         )
         return view
     }
@@ -88,7 +83,7 @@ struct KeyCapTouchView: UIViewRepresentable {
         // rebind so the callbacks stay pointed at the live key state
         view.bind(
             touches: touches, onFirstTouch: onFirstTouch, onLastTouch: onLastTouch,
-            tracksSurface: tracksSurface, region: region
+            tracksSurface: tracksSurface
         )
     }
 
@@ -99,30 +94,17 @@ struct KeyCapTouchView: UIViewRepresentable {
         private var onFirstTouch: () -> Void = {}
         private var onLastTouch: () -> Void = {}
         private var tracksSurface = false
-        private var region: (@Sendable (CGRect) -> Path)?
 
         func bind(
             touches: KeyTouchCount,
             onFirstTouch: @escaping () -> Void,
             onLastTouch: @escaping () -> Void,
-            tracksSurface: Bool,
-            region: (@Sendable (CGRect) -> Path)? = nil
+            tracksSurface: Bool
         ) {
             count = touches
             self.onFirstTouch = onFirstTouch
             self.onLastTouch = onLastTouch
             self.tracksSurface = tracksSurface
-            self.region = region
-        }
-
-        /// Refuse touches outside the control's region, so a shaped control's frame does
-        /// not claim the parts of the square it does not draw — and, when several shaped
-        /// controls share a frame, so each one only ever takes the touches that are
-        /// genuinely its own. `nil` accepts the whole frame, which is every rectangular
-        /// caller and is what this did before regions existed.
-        override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
-            guard let region else { return super.point(inside: point, with: event) }
-            return region(bounds).contains(point)
         }
 
         override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {

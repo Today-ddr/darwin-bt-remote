@@ -35,15 +35,6 @@ final class TrackpadInteractionPolicyTests: XCTestCase {
         XCTAssertFalse(sut.isDragging)
     }
 
-    func testResetOnlyEndsALiveDrag() {
-        var sut = TrackpadDragState()
-
-        XCTAssertFalse(sut.reset())
-        XCTAssertTrue(sut.begin())
-        XCTAssertTrue(sut.reset())
-        XCTAssertFalse(sut.isDragging)
-    }
-
     func testThreeAndFourFingerDefaultsFollowMacOSSemantics() {
         let rows = [
             (

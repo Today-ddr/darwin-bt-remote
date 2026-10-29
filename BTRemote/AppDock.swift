@@ -8,7 +8,7 @@ struct AppDock: View {
         HStack(spacing: 4) {
             ForEach(AppTab.allCases, id: \.self) { tab in
                 Button {
-                    Haptics.tap(from: .keyboard)
+                    Haptics.tap(from: .interface)
                     selection = tab
                 } label: {
                     VStack(spacing: 3) {

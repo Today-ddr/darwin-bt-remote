@@ -160,7 +160,7 @@ struct InputView: View {
     /// must not wait for `onDisappear` to learn that a key or a pointer button
     /// is up: release first, then navigate.
     private func navigate(to tab: AppTab) {
-        Haptics.tap(from: .keyboard)
+        Haptics.tap(from: .interface)
         releases.releaseAll(using: hid)
         switch tab {
         case .setup:
@@ -176,7 +176,7 @@ struct InputView: View {
     /// inherit a held key, a held pointer button or a live two-finger gesture.
     private func select(_ page: InputPage) {
         guard page != selectedPage else { return }
-        Haptics.tap(from: .keyboard)
+        Haptics.tap(from: .interface)
         releases.releaseAll(using: hid)
         withAnimation(.easeInOut(duration: 0.18)) {
             selectedPageRawValue = page.rawValue

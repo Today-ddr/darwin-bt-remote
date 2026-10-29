@@ -13,6 +13,10 @@ struct TrackpadPanel: View {
     @AppStorage(AppSettings.pinchGestureActionKey) private var pinchActionRaw = GestureDefaults.pinch.rawValue
     @AppStorage(AppSettings.rotationGestureActionKey) private var rotateActionRaw = GestureDefaults.rotation.rawValue
     @State private var activeButtons: MouseButtons = []
+    /// The left button a drag is holding. Kept as state so every report — a move, a
+    /// click pulse, the middle button — can merge the same button set instead of
+    /// replacing it with the one button it happens to care about.
+    @State private var isDragging = false
     @State private var releaseToken: InputReleaseCoordinator.Token?
     @State private var releaseHandle = TouchpadReleaseHandle()
 
@@ -29,6 +33,7 @@ struct TrackpadPanel: View {
         }
         .frame(maxHeight: .infinity)
         .onAppear {
+            guard releaseToken == nil else { return }
             releaseToken = releases.register { releaseEverything() }
         }
         .onDisappear {
@@ -50,21 +55,26 @@ struct TrackpadPanel: View {
                 doubleTapDragEnabled: doubleTapDrag,
                 longPressDragEnabled: longPressDrag,
                 releaseHandle: releaseHandle,
-                onMove: { dx, dy, isDragging in
-                    var buttons = activeButtons
-                    if isDragging {
-                        buttons.insert(.left)
-                    }
-                    hid.sendMouse(MouseReport(buttons: buttons, dX: dx, dY: dy))
+                onMove: { dx, dy, dragging in
+                    isDragging = dragging
+                    hid.sendMouse(MouseReport(buttons: buttons(dragging: dragging), dX: dx, dY: dy))
                 },
                 onScroll: { hid.scroll($0) },
-                onLeftClick: { Haptics.tap(from: .trackpad); hid.click(.left) },
-                onRightClick: { Haptics.tap(from: .trackpad); hid.click(.right) },
+                onLeftClick: { Haptics.tap(from: .trackpad); pulse(.left) },
+                onRightClick: { Haptics.tap(from: .trackpad); pulse(.right) },
                 onDragEnd: {
-                    hid.sendMouse(MouseReport(buttons: activeButtons))
+                    isDragging = false
+                    hid.sendMouse(MouseReport(buttons: buttons(dragging: false)))
                 },
                 onGestureAction: { action in
-                    action.execute(hid: hid)
+                    // A middle click is a mouse button, so it has to go through the
+                    // same merged button set rather than `HIDInput.click`, which would
+                    // report middle alone and release everything else that is held.
+                    if action == .middleClick {
+                        pulse(.middle)
+                    } else {
+                        action.execute(hid: hid)
+                    }
                 },
                 onZoom: { delta in
                     handlePinchZoom(delta: delta)
@@ -81,12 +91,38 @@ struct TrackpadPanel: View {
     /// and a zero report goes out only when something was actually held. A second
     /// call while nothing is held produces no second button transition.
     private func releaseEverything() {
-        let hadButtons = !activeButtons.isEmpty
+        let hadButtons = !activeButtons.isEmpty || isDragging
         releaseHandle.releaseNow()
         activeButtons = []
+        isDragging = false
         if hadButtons {
             hid.sendMouse(.zero)
         }
+    }
+
+    /// The one button set every report is built from: the buttons the panel is
+    /// holding plus the left button a drag is holding. Sending a report from anything
+    /// narrower would drop the other buttons on the host.
+    private var currentButtons: MouseButtons {
+        buttons(dragging: isDragging)
+    }
+
+    private func buttons(dragging: Bool) -> MouseButtons {
+        var buttons = activeButtons
+        if dragging {
+            buttons.insert(.left)
+        }
+        return buttons
+    }
+
+    /// One click without losing the other buttons: press the clicked button on top of
+    /// the current set, then send exactly that set again. A middle button that is held
+    /// through a left click, or a drag's left button held through a middle click, stays
+    /// down across the whole pair.
+    private func pulse(_ button: MouseButtons) {
+        let held = currentButtons
+        hid.sendMouse(MouseReport(buttons: held.union(button)))
+        hid.sendMouse(MouseReport(buttons: held))
     }
 
     /// Pinch falls back to zoom, which is the closest a keyboard can come to a
@@ -133,16 +169,18 @@ struct TrackpadPanel: View {
         }
     }
 
-    /// Middle click, held down for as long as the button is pressed.
+    /// Middle click, held down for as long as the button is pressed. The reports
+    /// include the drag's left button, so pressing middle during a drag does not
+    /// quietly let go of the drag.
     private var middleButton: some View {
         HoldButton(
             onPress: {
                 activeButtons.insert(.middle)
-                hid.sendMouse(MouseReport(buttons: activeButtons))
+                hid.sendMouse(MouseReport(buttons: currentButtons))
             },
             onRelease: {
                 activeButtons.remove(.middle)
-                hid.sendMouse(MouseReport(buttons: activeButtons))
+                hid.sendMouse(MouseReport(buttons: currentButtons))
             },
             hapticSource: .trackpad,
             background: { RoundedRectangle(cornerRadius: 12).fill(appTheme.controlFill) },

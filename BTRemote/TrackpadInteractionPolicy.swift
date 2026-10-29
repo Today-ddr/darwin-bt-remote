@@ -23,11 +23,6 @@ struct TrackpadDragState: Equatable {
         isDragging = false
         return true
     }
-
-    @discardableResult
-    mutating func reset() -> Bool {
-        end()
-    }
 }
 
 /// Five-finger gestures are out of scope: the surface recognizes one to four

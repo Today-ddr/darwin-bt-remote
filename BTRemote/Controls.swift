@@ -37,29 +37,21 @@ struct PressGesture: ViewModifier {
     /// `nil` silences the built-in press feedback for controls that report a
     /// dedicated haptic of their own, such as the scroll buttons.
     var hapticSource: Haptics.Source? = .keyboard
-    /// Region of the content that may take the press, in the content's own coordinates.
-    /// `nil` (the default) is the whole frame, which is what every rectangle control wants.
-    var region: (@Sendable (CGRect) -> Path)?
 
     /// Finger count feeding the surface total. The layer reports only its own
     /// transitions; the count is the shared type `KeyCapTouchView` is given.
     @State private var touches = KeyTouchCount()
 
     func body(content: Content) -> some View {
-        // `contentShape` is applied unconditionally, with the frame standing in when
-        // there is no region: an `if let` here would put the two cases behind a
-        // `_ConditionalContent`, and a conditional that changes branch identity as a
-        // property changes is a view SwiftUI may rebuild rather than update.
         content
             .overlay {
                 KeyCapTouchView(
                     touches: touches,
                     onFirstTouch: press,
-                    onLastTouch: release,
-                    region: region
+                    onLastTouch: release
                 )
             }
-            .contentShape(RegionShape(region: region))
+            .contentShape(Rectangle())
             .onDisappear(perform: release)
     }
 
@@ -76,17 +68,6 @@ struct PressGesture: ViewModifier {
         guard pressed else { return }
         pressed = false
         onRelease()
-    }
-}
-
-/// A `Shape` drawn by a closure, so `PressGesture` can hand SwiftUI the region a shaped
-/// control occupies without having to know the shape's type. A `nil` region is the whole
-/// rect — the frame every rectangular control is hit by anyway.
-private struct RegionShape: Shape {
-    let region: (@Sendable (CGRect) -> Path)?
-
-    func path(in rect: CGRect) -> Path {
-        region?(rect) ?? Path(rect)
     }
 }
 
