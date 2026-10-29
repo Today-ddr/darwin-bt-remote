@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import UIKit
 
@@ -105,6 +106,9 @@ struct BTRemoteApp: App {
                 .environment(\.appTheme, theme)
                 .preferredColorScheme(theme.preferredColorScheme)
                 .onAppear {
+                    // the HID battery reflects the device's own level; enabling monitoring
+                    // also makes the change notification below arrive
+                    lowEnergy.refreshBatteryLevel()
                     // with the preference off nothing is advertised, but the radio is
                     // still read so Setup shows the real Bluetooth state instead of
                     // "unknown" — `observeState` installs no services and starts no
@@ -114,6 +118,11 @@ struct BTRemoteApp: App {
                     } else {
                         lowEnergy.observeState()
                     }
+                }
+                // foreground-only battery tracking: no background task, and the system
+                // posts this only while monitoring is enabled
+                .onReceive(NotificationCenter.default.publisher(for: UIDevice.batteryLevelDidChangeNotification)) { _ in
+                    lowEnergy.refreshBatteryLevel()
                 }
                 // a host that finds this app wakes to a radio that is still advertising, and
                 // a link that outlives the foreground keeps waking it, so neither outlives

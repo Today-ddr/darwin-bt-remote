@@ -595,7 +595,7 @@ private struct KeyCapLabel: View {
                 Circle()
                     .fill(isArmed ? Color.red : Color.secondary.opacity(0.4))
                     .frame(width: isCompact ? 4 : 5, height: isCompact ? 4 : 5)
-                Text("Caps")
+                Text(L10n.Keyboard.caps)
                     .font(.system(size: isCompact ? 9 : 11, weight: .medium))
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)

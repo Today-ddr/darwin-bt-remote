@@ -35,15 +35,10 @@ enum TrackpadGestureAction: String, CaseIterable, Identifiable {
         case .spotlight: L10n.Gesture.actionSpotlight
         case .controlCenter: L10n.Gesture.actionControlCenter
         case .notificationCenter: L10n.Gesture.actionNotificationCenter
-        // These four are new, so `L10n.swift` has no accessor for them yet.
-        // The keys are spelled out here rather than in a placeholder accessor
-        // so that the only thing still to do is the catalog entry: once
-        // `gesture.action_mission_control` and its three neighbours exist in
-        // `Localizable.xcstrings`, these lines already resolve to them.
-        case .missionControl: "gesture.action_mission_control"
-        case .appExpose: "gesture.action_app_expose"
-        case .switchSpaceLeft: "gesture.action_switch_space_left"
-        case .switchSpaceRight: "gesture.action_switch_space_right"
+        case .missionControl: L10n.Gesture.actionMissionControl
+        case .appExpose: L10n.Gesture.actionAppExpose
+        case .switchSpaceLeft: L10n.Gesture.actionSwitchSpaceLeft
+        case .switchSpaceRight: L10n.Gesture.actionSwitchSpaceRight
         case .screenshot: L10n.Gesture.actionScreenshot
         case .middleClick: L10n.Gesture.actionMiddleClick
         case .zoom: L10n.Gesture.actionZoom
@@ -151,7 +146,7 @@ struct GestureChord {
     /// keyboard reaches through the Windows key.
     var hint: String {
         if let button {
-            return button == .middle ? "Mouse Middle Button" : ""
+            return button == .middle ? L10n.Mouse.middleButtonText : ""
         }
         guard let key else { return "" }
         var symbols = ""

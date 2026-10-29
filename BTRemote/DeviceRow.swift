@@ -51,7 +51,9 @@ struct ConnectedDeviceRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            if entry.isSubscribed {
+            // only a subscribed host that has not been removed can be muted by tapping its
+            // name; a removed row must not hide a second action behind the same tap
+            if entry.isSubscribed, !entry.isRemoved {
                 Button(action: onToggle) { label }
                     .buttonStyle(.borderless)
                     .accessibilityLabel(Text(verbatim: entry.displayName))

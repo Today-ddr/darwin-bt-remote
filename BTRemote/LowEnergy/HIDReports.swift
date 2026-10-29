@@ -1,60 +1,5 @@
 import Foundation
 
-struct DigitizerContact: Sendable, Equatable {
-    var tipSwitch: Bool = false
-    var confidence: Bool = true
-    var id: UInt8 = 0
-    var x: UInt16 = 0
-    var y: UInt16 = 0
-}
-
-struct DigitizerReport: Sendable, Equatable {
-    var button: Bool = false
-    var contact1 = DigitizerContact()
-    var contact2 = DigitizerContact()
-    var contactCount: UInt8 = 0
-
-    static let zero = DigitizerReport()
-
-    var data: Data {
-        var bytes = [UInt8](repeating: 0, count: 14)
-        bytes[0] = button ? 1 : 0
-
-        // Contact 1
-        var c1Flags: UInt8 = 0
-        if contact1.tipSwitch {
-            c1Flags |= 1
-        }
-        if contact1.confidence {
-            c1Flags |= 2
-        }
-        bytes[1] = c1Flags
-        bytes[2] = contact1.id
-        bytes[3] = UInt8(contact1.x & 0xFF)
-        bytes[4] = UInt8((contact1.x >> 8) & 0xFF)
-        bytes[5] = UInt8(contact1.y & 0xFF)
-        bytes[6] = UInt8((contact1.y >> 8) & 0xFF)
-
-        // Contact 2
-        var c2Flags: UInt8 = 0
-        if contact2.tipSwitch {
-            c2Flags |= 1
-        }
-        if contact2.confidence {
-            c2Flags |= 2
-        }
-        bytes[7] = c2Flags
-        bytes[8] = contact2.id
-        bytes[9] = UInt8(contact2.x & 0xFF)
-        bytes[10] = UInt8((contact2.x >> 8) & 0xFF)
-        bytes[11] = UInt8(contact2.y & 0xFF)
-        bytes[12] = UInt8((contact2.y >> 8) & 0xFF)
-
-        bytes[13] = contactCount
-        return Data(bytes)
-    }
-}
-
 struct MouseReport: Sendable, Equatable {
     var buttons: MouseButtons = []
     var dX: Int8 = 0
@@ -63,12 +8,27 @@ struct MouseReport: Sendable, Equatable {
 
     static let zero = MouseReport()
 
+    /// Report protocol: buttons, X, Y and wheel (4 bytes).
     var data: Data {
         Data([
             buttons.rawValue,
             UInt8(bitPattern: dX),
             UInt8(bitPattern: dY),
             UInt8(bitPattern: wheel)
+        ])
+    }
+
+    /// Boot protocol: buttons, X and Y (3 bytes), with no wheel.
+    ///
+    /// A boot host reads the Boot Mouse Input characteristic, which is defined by the HID
+    /// boot protocol and has exactly this layout. Writing the 4-byte report there left the
+    /// wheel byte on the wire as a fourth byte a boot host does not expect, so it is sent
+    /// only on the main mouse report.
+    var bootData: Data {
+        Data([
+            buttons.rawValue,
+            UInt8(bitPattern: dX),
+            UInt8(bitPattern: dY)
         ])
     }
 }
@@ -155,79 +115,4 @@ enum Keycode: UInt8, Sendable, Equatable, Hashable {
     case leftArrow = 0x50
     case downArrow = 0x51
     case upArrow = 0x52
-}
-
-struct SystemControlReport: Sendable, Equatable {
-    var actions: SystemActions = []
-
-    static let zero = SystemControlReport()
-
-    var data: Data {
-        Data([actions.rawValue])
-    }
-}
-
-struct SystemActions: OptionSet, Sendable, Equatable {
-    let rawValue: UInt8
-    static let powerDown = SystemActions(rawValue: 1 << 0)
-    static let sleep = SystemActions(rawValue: 1 << 1)
-    static let coldRestart = SystemActions(rawValue: 1 << 2)
-    static let displayToggle = SystemActions(rawValue: 1 << 3)
-    static let displayLCDAutoscale = SystemActions(rawValue: 1 << 4)
-    static let mainMenu = SystemActions(rawValue: 1 << 5)
-    static let appMenu = SystemActions(rawValue: 1 << 6)
-    static let displayBrightnessDecrement = SystemActions(rawValue: 1 << 7)
-}
-
-/// consumer report (5 bytes)
-struct ConsumerReport: Sendable, Equatable {
-    var key: ConsumerKey = .none
-    var acUsageA: UInt8 = 0
-    var acUsageB: UInt8 = 0
-    var sub: UInt8 = 0
-
-    static let zero = ConsumerReport()
-
-    var data: Data {
-        let raw = key.rawValue
-        return Data([
-            UInt8(raw & 0xFF),
-            UInt8(raw >> 8),
-            acUsageA,
-            acUsageB,
-            sub
-        ])
-    }
-}
-
-/// USB HID usage page 0x0C
-enum ConsumerKey: UInt16, Sendable, Equatable {
-    case none = 0x0000
-    case playPause = 0x00CD
-    case scanNext = 0x00B5
-    case scanPrev = 0x00B6
-    case stop = 0x00B7
-    case rewind = 0x00B4
-    case fastForward = 0x00B3
-    case mute = 0x00E2
-    case volumeUp = 0x00E9
-    case volumeDown = 0x00EA
-    case channelUp = 0x009C
-    case channelDown = 0x009D
-    case closedCaption = 0x0061
-    case eject = 0x00B8
-    case menu = 0x0040
-    case menuPick = 0x0041
-    case menuUp = 0x0042
-    case menuDown = 0x0043
-    case menuLeft = 0x0044
-    case menuRight = 0x0045
-    case power = 0x0030
-}
-
-extension ConsumerReport {
-    static let acHome = ConsumerReport(acUsageB: 0x23)
-    static let acBack = ConsumerReport(acUsageB: 0x24)
-    static let eject = ConsumerReport(key: .eject)
-    static let keyboardLayout = ConsumerReport(acUsageB: 0x2D)
 }

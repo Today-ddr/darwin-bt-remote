@@ -228,6 +228,11 @@ extension L10n {
         static var capsLock: LocalizedStringKey {
             "keyboard.caps_lock"
         }
+
+        /// Short label on the Caps Lock cap itself; `caps_lock` names the key in prose.
+        static var caps: LocalizedStringKey {
+            "keyboard.caps"
+        }
     }
 
     enum Gesture {
@@ -347,6 +352,22 @@ extension L10n {
             "gesture.action_notification_center"
         }
 
+        static var actionMissionControl: LocalizedStringKey {
+            "gesture.action_mission_control"
+        }
+
+        static var actionAppExpose: LocalizedStringKey {
+            "gesture.action_app_expose"
+        }
+
+        static var actionSwitchSpaceLeft: LocalizedStringKey {
+            "gesture.action_switch_space_left"
+        }
+
+        static var actionSwitchSpaceRight: LocalizedStringKey {
+            "gesture.action_switch_space_right"
+        }
+
         static var actionScreenshot: LocalizedStringKey {
             "gesture.action_screenshot"
         }
@@ -371,6 +392,11 @@ extension L10n {
     enum Mouse {
         static var middleButton: LocalizedStringKey {
             "mouse.button.middle"
+        }
+
+        /// The same label as a `String`, for the context-free shortcut hint.
+        static var middleButtonText: String {
+            String(localized: "mouse.button.middle")
         }
 
         static var wheelUp: LocalizedStringKey {

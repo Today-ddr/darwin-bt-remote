@@ -2,6 +2,9 @@ import Combine
 import CoreBluetooth
 import os
 import SwiftUI
+#if canImport(UIKit)
+    import UIKit
+#endif
 
 /// Identity of one parked report.
 ///
@@ -127,12 +130,14 @@ final class HIDPeripheral: NSObject, ObservableObject {
     private static var zeroInputReports: [UInt8: Data] {
         [
             ReportID.mouse.rawValue: MouseReport.zero.data,
-            ReportID.keyboard.rawValue: KeyboardReport.zero.data,
-            ReportID.systemControl.rawValue: SystemControlReport.zero.data,
-            ReportID.consumerControl.rawValue: ConsumerReport.zero.data,
-            ReportID.digitizer.rawValue: DigitizerReport.zero.data
+            ReportID.keyboard.rawValue: KeyboardReport.zero.data
         ]
     }
+
+    /// Key used when a battery notification has to be parked. Battery is a standard GATT
+    /// characteristic rather than a HID report, so it has no `ReportID`; this byte only keeps
+    /// its parked entry distinct from the reports that do.
+    private static let batteryNotificationID: UInt8 = 0x04
 
     /// One parked payload per (report ID, characteristic instance, target host). A single
     /// slot per ID let any later report evict a parked one, and keying by ID alone still
@@ -335,9 +340,9 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// (`suspend` clears both before calling, `_resetForRestart` leaves them for `start`).
     ///
     /// What survives is deliberately only what belongs to the device rather than to a link:
-    /// `blockedCentrals`, `state`, `advertiseLocalName`, `batteryLevel` and the battery
-    /// report. Input reports are reset to zero by `_clearLinkState`, so a host that
-    /// subscribes after a rebuild can never be replayed the previous link's held key.
+    /// `blockedCentrals`, `state`, `advertiseLocalName` and `batteryLevel`. Input reports are
+    /// reset to zero by `_clearLinkState`, so a host that subscribes after a rebuild can
+    /// never be replayed the previous link's held key.
     private func _tearDownPeripheral() {
         pManager?.stopAdvertising()
         pManager = nil
@@ -352,8 +357,8 @@ final class HIDPeripheral: NSObject, ObservableObject {
     ///
     /// The input report cache is reset to zero — a release baseline — rather than kept, so
     /// a new subscription after a power cycle or a resume cannot be handed the key that was
-    /// held when the old link died. Battery is not input: its level belongs to the device
-    /// and is kept.
+    /// held when the old link died. Battery is not input: `batteryLevel` belongs to the
+    /// device and is kept.
     private func _clearLinkState() {
         isHIDServiceAdded = false
         // the manager the request belonged to is gone (or the radio went away), so that
@@ -385,12 +390,9 @@ final class HIDPeripheral: NSObject, ObservableObject {
         subscribeCounter = 0
         keyboardLEDs = []
         currentProtocolMode = 0x01
-        // input goes back to the release baseline; battery is device state, not link state
-        let cachedBattery = cachedReports[ReportID.battery.rawValue]
+        // input goes back to the release baseline; battery belongs to the device and is
+        // read from `batteryLevel`, not from this cache
         cachedReports = Self.zeroInputReports
-        if let cachedBattery {
-            cachedReports[ReportID.battery.rawValue] = cachedBattery
-        }
         // the notice says reports are being dropped. A teardown ends every link on purpose,
         // so leaving it up would describe a deliberate act, and nothing would retract it
         // while no host is subscribed: `_clearDroppedInputNoticeIfHeld` needs a report to
@@ -404,44 +406,37 @@ final class HIDPeripheral: NSObject, ObservableObject {
         _sendMouse(report, isRelease: false)
     }
 
-    func sendDigitizer(_ report: DigitizerReport) {
-        _sendDigitizer(report, isRelease: false)
-    }
-
     func sendKeyboard(_ report: KeyboardReport) {
         _sendKeyboard(report, isRelease: false)
-    }
-
-    func sendConsumer(_ report: ConsumerReport) {
-        broadcast(report.data, reportID: .consumerControl, isRelease: false)
-    }
-
-    func sendSystemControl(_ report: SystemControlReport) {
-        broadcast(report.data, reportID: .systemControl, isRelease: false)
     }
 
     /// The one place a mouse report is written, with whether it is a release travelling
     /// alongside it. The public entry points above always send input; `_releaseHeldInput`
     /// is the only caller that marks a report as a release.
+    ///
+    /// The Boot Mouse Input characteristic is written only for the host that actually
+    /// subscribes to it. Boot hosts read that characteristic instead of the main mouse
+    /// report, and it has a 3-byte layout without the wheel, so the main 4-byte report is
+    /// never copied there.
     private func _sendMouse(_ report: MouseReport, isRelease: Bool) {
         broadcast(report.data, reportID: .mouse, isRelease: isRelease)
-    }
-
-    private func _sendDigitizer(_ report: DigitizerReport, isRelease: Bool) {
-        broadcast(report.data, reportID: .digitizer, isRelease: isRelease)
+        guard let bootChar = bootMouseInputChar else { return }
+        _ = updateValue(
+            report.bootData,
+            for: bootChar,
+            reportID: ReportID.mouse.rawValue,
+            isRelease: isRelease
+        )
     }
 
     /// The same split for the keyboard: the main report and the boot report carry the same
     /// release flag, so both protocol variants can clear a key that is still down.
     private func _sendKeyboard(_ report: KeyboardReport, isRelease: Bool) {
         broadcast(report.data, reportID: .keyboard, isRelease: isRelease)
-        // Boot-protocol hosts read this characteristic instead. Only the host that actually
-        // subscribed to it gets a copy: a host in report protocol never subscribes here, so
-        // writing unconditionally would either be dropped or — worse — park a duplicate
-        // key-up that competes with the main report's own queue.
-        guard let bootChar = bootKeyboardInputChar,
-              !activeRecipients(for: bootChar).isEmpty
-        else { return }
+        // Boot-protocol hosts read this characteristic instead. `updateValue` only writes it
+        // to a host that actually subscribed to this instance; a host in report protocol
+        // never subscribes here, so it receives nothing and no report is parked for it.
+        guard let bootChar = bootKeyboardInputChar else { return }
         _ = updateValue(
             report.data,
             for: bootChar,
@@ -453,8 +448,8 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// Mute or unmute a host. Muting is a filter on top of control, never a way to hand it
     /// over: a muted host holds nothing and the host that holds control keeps it, so the two
     /// filters never contradict each other (both are what the row's state is read from, see
-    /// `DeviceEntry`). Unmuting the host that holds control lets it receive again, so a report
-    /// parked while it was muted — a key-up, typically — is retried here rather than left
+    /// `DeviceEntry`). Unmuting the host that holds control lets it receive again, so a
+    /// release that congestion parked while it was muted is retried here rather than left
     /// waiting for some later ping to flush it.
     func toggleActive(_ uuid: UUID) {
         if inactiveCentrals.contains(uuid) {
@@ -476,18 +471,20 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// `CBPeripheralManager` has no counterpart to `cancelPeripheralConnection`,
     /// and removing the service does not notify the peer (it only makes this side
     /// lose track of its subscribers). So the link itself survives and the host stays
-    /// in the connected list, marked as removed. There it receives nothing until the
+    /// in the connected list, marked as removed. There it receives no new input until the
     /// user restores it: the block outlives unsubscribes and reconnects, so a host
-    /// that comes back on its own does not get a second chance at the input.
+    /// that comes back on its own does not get a second chance at the input. A release
+    /// already parked for it may still be written, because clearing held state is not input
+    /// (see `drainPendingBroadcasts`).
     func removeCentral(_ uuid: UUID) {
-        // release before the host is cut off, and only while it can still receive: a key-up
-        // sent after the removal goes nowhere and would leave the host holding whatever was
-        // down when control was taken away. Control is then left on nobody rather than
-        // handed to another subscriber: a removal must not silently reroute input, so it
-        // stays dead until the user restores the row or a host subscribes again. The notice
-        // in `_reportDroppedInputIfNone` is what keeps that from being invisible.
+        // Release before the host is cut off. This runs even when the host is muted: the
+        // release is the last chance to clear what it may still be holding, and the block is
+        // applied below. Control is then left on nobody rather than handed to another
+        // subscriber: a removal must not silently reroute input, so it stays dead until the
+        // user restores the row or a host subscribes again. The notice in
+        // `_reportDroppedInputIfNone` is what keeps that from being invisible.
         let wasActive = activeCentral == uuid
-        if wasActive, hasControl {
+        if wasActive {
             _releaseHeldInput()
         }
         if wasActive {
@@ -570,19 +567,19 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// what is displayed and what is routed the same thing.
     ///
     /// Every input the old host could be holding is released before the reroute, and the new
-    /// host starts from a full zero baseline: keyboard, mouse and digitizer, not just the
-    /// keys of the last report.
+    /// host starts from a full zero baseline — keyboard and mouse, not just the keys of the
+    /// last report.
     func makeActive(_ uuid: UUID) {
         guard holdsInputSubscription(uuid),
               !blockedCentrals.contains(uuid),
               !inactiveCentrals.contains(uuid),
               activeCentral != uuid
         else { return }
-        // the host losing control is told that nothing is held any more, but only while it
-        // can still receive it — a muted host has no recipient and a release would be noise
-        if hasControl {
-            _releaseHeldInput()
-        }
+        // The host losing control is told that nothing is held any more, even if it is muted:
+        // a release is not input, and a key that was down before the mute would otherwise
+        // stay down on that host. The release still only reaches a host that is linked and
+        // subscribed (see `updateValue`).
+        _releaseHeldInput()
         activeCentral = uuid
         _releaseHeldInput()
         _trace("active host: \(uuid)")
@@ -592,10 +589,10 @@ final class HIDPeripheral: NSObject, ObservableObject {
         _drainIfUnblocked()
     }
 
-    /// Releases every kind of input a host could be holding: keyboard keys and modifiers,
-    /// mouse buttons (and any unfinished motion), and the digitizer's contacts. One zeroed
-    /// report per characteristic is what tells the host nothing is down any more; a report
-    /// type nobody is subscribed to quietly does nothing.
+    /// Releases every kind of input a host could be holding: keyboard keys and modifiers, and
+    /// mouse buttons (with any unfinished motion). One zeroed report per characteristic is
+    /// what tells the host nothing is down any more; a report type nobody is subscribed to
+    /// quietly does nothing.
     ///
     /// Everything written here is marked as a release. That is what lets it survive a switch
     /// of control: the previous host's release is still delivered after the new host has
@@ -603,7 +600,6 @@ final class HIDPeripheral: NSObject, ObservableObject {
     private func _releaseHeldInput() {
         _sendKeyboard(.zero, isRelease: true)
         _sendMouse(.zero, isRelease: true)
-        _sendDigitizer(.zero, isRelease: true)
     }
 
     /// Gives control to a subscribed, unblocked and unmuted host after the one that held it
@@ -636,10 +632,9 @@ final class HIDPeripheral: NSObject, ObservableObject {
         activeCentral = next
         _trace("active host: \(next) (handover)")
         // the report of the host that just lost control goes with it, and the new one is
-        // given a complete zero baseline — keyboard, mouse and digitizer — so it cannot
-        // inherit a held state from the host that left. `didSubscribeTo` is left to replay
-        // its cached state where that applies, so a host is not brought up to date twice
-        // over a subscribe.
+        // given a complete zero baseline — keyboard and mouse — so it cannot inherit a held
+        // state from the host that left. `didSubscribeTo` is left to replay its cached state
+        // where that applies, so a host is not brought up to date twice over a subscribe.
         _dropParkedBroadcastsFromPreviousHost()
         _releaseHeldInput()
         _drainIfUnblocked()
@@ -679,15 +674,28 @@ final class HIDPeripheral: NSObject, ObservableObject {
         activeRecipients().isEmpty
     }
 
+    /// Reads the device's own battery and publishes it as the HID battery level.
+    ///
+    /// Monitoring has to be enabled before `UIDevice.batteryLevel` reports anything other
+    /// than -1. A negative value means the level is not known yet, and leaves the published
+    /// level at whatever it was rather than inventing 0%. This is a UIKit-only, foreground
+    /// read: no background task or new entitlement is involved.
+    func refreshBatteryLevel() {
+        #if canImport(UIKit)
+            UIDevice.current.isBatteryMonitoringEnabled = true
+            let level = UIDevice.current.batteryLevel
+            guard level >= 0 else { return }
+            updateBatteryLevel(UInt8((level * 100).rounded()))
+        #endif
+    }
+
     func updateBatteryLevel(_ level: UInt8) {
-        let clamped = min(level, 100)
-        batteryLevel = clamped
-        let asHIDReport = Data([clamped])
-        cachedReports[ReportID.battery.rawValue] = asHIDReport
+        batteryLevel = min(level, 100)
         // Battery is device state, not input: it goes to every host that actually subscribed
         // to the battery characteristic, even if none of them holds input control. No
         // subscriber is a normal state here and must never raise the dropped-input notice.
         guard let batteryLevelChar, let pManager else { return }
+        let report = Data([batteryLevel])
         let recipients = subscribedCentrals.compactMap { uuid, chars -> CBCentral? in
             guard chars.contains(ObjectIdentifier(batteryLevelChar)),
                   !blockedCentrals.contains(uuid)
@@ -695,7 +703,7 @@ final class HIDPeripheral: NSObject, ObservableObject {
             return centralObjects[uuid]
         }
         guard !recipients.isEmpty else { return }
-        _ = pManager.updateValue(asHIDReport, for: batteryLevelChar, onSubscribedCentrals: recipients)
+        _ = pManager.updateValue(report, for: batteryLevelChar, onSubscribedCentrals: recipients)
     }
 
     /// if host connects but never subscribes (stale GATT cache), cycle a temp service to fire Service Changed so it re-discovers
@@ -785,12 +793,8 @@ final class HIDPeripheral: NSObject, ObservableObject {
             value: nil,
             permissions: .readEncryptionRequired
         )
-        // expose battery as HID Report ID 4 too
-        let reportRef = CBMutableDescriptor(
-            type: HIDProfile.reportReference,
-            value: NSData(data: ReportID.battery.descriptor(.input))
-        )
-        level.descriptors = [reportRef]
+        // The battery is a plain Battery Service (0x180F / 0x2A19). It is not a HID report,
+        // so it carries no Report Reference descriptor pointing into the report map.
         service.characteristics = [level]
         batteryLevelChar = level
         return service
@@ -845,19 +849,12 @@ final class HIDPeripheral: NSObject, ObservableObject {
             permissions: [.readEncryptionRequired, .writeEncryptionRequired]
         )
 
-        // links the HID report map to battery level
         let reportMap = CBMutableCharacteristic(
             type: HIDProfile.reportMap,
             properties: .read,
             value: HIDProfile.reportMapData,
             permissions: .readEncryptionRequired
         )
-        reportMap.descriptors = [
-            CBMutableDescriptor(
-                type: HIDProfile.externalReportReference,
-                value: NSData(data: HIDProfile.externalReportReferenceValue)
-            )
-        ]
 
         // report characteristic order matters: keyboard first establishes keyboard primary identity
         let keyboardReportChar = makeReportChar(.keyboard, type: .input)
@@ -874,9 +871,6 @@ final class HIDPeripheral: NSObject, ObservableObject {
             )
         ]
         let mouseReportChar = makeReportChar(.mouse, type: .input)
-        let systemReportChar = makeReportChar(.systemControl, type: .input)
-        let consumerReportChar = makeReportChar(.consumerControl, type: .input)
-        let digitizerReportChar = makeReportChar(.digitizer, type: .input)
 
         service.characteristics = [
             controlPoint,
@@ -888,20 +882,14 @@ final class HIDPeripheral: NSObject, ObservableObject {
             reportMap,
             keyboardReportChar,
             outputReportChar,
-            mouseReportChar,
-            systemReportChar,
-            consumerReportChar,
-            digitizerReportChar
+            mouseReportChar
         ]
 
         bootMouseInputChar = bootMouseInput
         bootKeyboardInputChar = bootKbdInput
-        charsByReportID[ReportID.systemControl.rawValue] = systemReportChar
-        charsByReportID[ReportID.consumerControl.rawValue] = consumerReportChar
         charsByReportID[ReportID.mouse.rawValue] = mouseReportChar
         charsByReportID[ReportID.keyboard.rawValue] = keyboardReportChar
         charsByReportID[ReportID.keyboardLEDs.rawValue] = outputReportChar
-        charsByReportID[ReportID.digitizer.rawValue] = digitizerReportChar
 
         return service
     }
@@ -957,7 +945,9 @@ final class HIDPeripheral: NSObject, ObservableObject {
     ///
     /// `isRelease` marks the zero report `_releaseHeldInput` writes. It is carried into the
     /// parked entry so a release survives a switch of control and is routed by its own
-    /// target rather than by whoever is active when the queue recovers.
+    /// target rather than by whoever is active when the queue recovers. On the send path it
+    /// also bypasses the mute/block filter: the host is cleared as long as it is still
+    /// subscribed, so a host that was muted while holding a key cannot keep it down.
     @discardableResult
     private func updateValue(
         _ data: Data,
@@ -967,17 +957,35 @@ final class HIDPeripheral: NSObject, ObservableObject {
         isRelease: Bool = false
     ) -> Bool {
         guard let pManager else { return false }
-        guard let target = activeCentral, hasControl else {
+        guard let target = activeCentral else {
             if reportsDrop {
                 _reportDroppedInputIfNone()
             }
             return false
         }
-        let recipients = activeRecipients(for: char)
-        guard !recipients.isEmpty else {
-            // the host holds control but is not subscribed to this characteristic: there is
-            // nowhere for this report to go, and that is not the dropped-input state
-            return false
+        let recipients: [CBCentral]
+        if isRelease {
+            // A release is allowed to reach the host it is clearing even when that host is
+            // muted or removed: the report only says "nothing is held", and leaving a key
+            // down is worse than a zero the filter did not ask for. The link is still the
+            // gate — no live central object or no subscription means nowhere to write.
+            guard subscribedCentrals[target]?.contains(ObjectIdentifier(char)) == true,
+                  let central = centralObjects[target]
+            else { return false }
+            recipients = [central]
+        } else {
+            guard hasControl else {
+                if reportsDrop {
+                    _reportDroppedInputIfNone()
+                }
+                return false
+            }
+            recipients = activeRecipients(for: char)
+            guard !recipients.isEmpty else {
+                // the host holds control but is not subscribed to this characteristic: there
+                // is nowhere for this report to go, and that is not the dropped-input state
+                return false
+            }
         }
         if !isReadyToSendNotification {
             park(data, for: char, reportID: reportID, target: target, isRelease: isRelease)
@@ -1182,9 +1190,10 @@ final class HIDPeripheral: NSObject, ObservableObject {
         return [central]
     }
 
-    /// Whether this host subscribes to at least one characteristic that carries input.
-    /// A host that only subscribed to, say, battery level cannot receive input, so it must
-    /// not hold control away from a host that can.
+    /// Whether this host subscribes to at least one characteristic that carries input. Only
+    /// the main keyboard/mouse reports and their boot counterparts count: a host that only
+    /// subscribed to battery level (or to the output report) cannot receive input, so it
+    /// must not hold control away from a host that can.
     private func holdsInputSubscription(_ uuid: UUID) -> Bool {
         guard let subscriptions = subscribedCentrals[uuid] else { return false }
         if let bootKeyboardInputChar, subscriptions.contains(ObjectIdentifier(bootKeyboardInputChar)) {
@@ -1193,9 +1202,17 @@ final class HIDPeripheral: NSObject, ObservableObject {
         if let bootMouseInputChar, subscriptions.contains(ObjectIdentifier(bootMouseInputChar)) {
             return true
         }
-        return charsByReportID.contains { id, char in
-            id != ReportID.keyboardLEDs.rawValue && subscriptions.contains(ObjectIdentifier(char))
+        if let keyboard = charsByReportID[ReportID.keyboard.rawValue],
+           subscriptions.contains(ObjectIdentifier(keyboard))
+        {
+            return true
         }
+        if let mouse = charsByReportID[ReportID.mouse.rawValue],
+           subscriptions.contains(ObjectIdentifier(mouse))
+        {
+            return true
+        }
+        return false
     }
 
     /// The same recipient, restricted to hosts that are actually subscribed to this
@@ -1391,11 +1408,18 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
         if let id = reportID(forCharacteristic: char), let cached = cachedReports[id] {
             _ = updateValue(cached, for: char, reportID: id, reportsDrop: false)
         } else if characteristic.uuid == HIDProfile.bootMouseInputReport {
-            _ = updateValue(MouseReport.zero.data, for: char, reportID: ReportID.mouse.rawValue, reportsDrop: false)
+            // boot protocol: 3 bytes with no wheel; the main 4-byte report must not be
+            // replayed onto this characteristic
+            _ = updateValue(MouseReport.zero.bootData, for: char, reportID: ReportID.mouse.rawValue, reportsDrop: false)
         } else if characteristic.uuid == HIDProfile.bootKeyboardInputReport {
             _ = updateValue(KeyboardReport.zero.data, for: char, reportID: ReportID.keyboard.rawValue, reportsDrop: false)
         } else if characteristic.uuid == HIDProfile.batteryLevel {
-            _ = updateValue(Data([batteryLevel]), for: char, reportID: ReportID.battery.rawValue, reportsDrop: false)
+            _ = updateValue(
+                Data([batteryLevel]),
+                for: char,
+                reportID: Self.batteryNotificationID,
+                reportsDrop: false
+            )
         }
     }
 
@@ -1475,7 +1499,10 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
                 return cachedReports[id] ?? Data()
             }
             return Data()
-        case HIDProfile.bootMouseInputReport: return cachedReports[ReportID.mouse.rawValue] ?? Data()
+        case HIDProfile.bootMouseInputReport:
+            // a read of an input characteristic answers with the idle baseline, not the
+            // main mouse report: boot layout is 3 bytes and has no wheel byte
+            return MouseReport.zero.bootData
         case HIDProfile.bootKeyboardInputReport: return cachedReports[ReportID.keyboard.rawValue] ?? Data()
         default: return Data()
         }

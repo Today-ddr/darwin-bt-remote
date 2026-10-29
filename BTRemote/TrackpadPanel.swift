@@ -56,7 +56,12 @@ struct TrackpadPanel: View {
                 longPressDragEnabled: longPressDrag,
                 releaseHandle: releaseHandle,
                 onMove: { dx, dy, dragging in
-                    isDragging = dragging
+                    // Only touch state when the drag flag actually changes: writing the
+                    // same value on every move still invalidates this panel's body, which
+                    // is every frame of a drag.
+                    if isDragging != dragging {
+                        isDragging = dragging
+                    }
                     hid.sendMouse(MouseReport(buttons: buttons(dragging: dragging), dX: dx, dY: dy))
                 },
                 onScroll: { hid.scroll($0) },
