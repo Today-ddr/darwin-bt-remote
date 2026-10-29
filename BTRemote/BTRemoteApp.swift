@@ -3,6 +3,7 @@ import UIKit
 
 @main
 struct BTRemoteApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var lowEnergy = HIDPeripheral()
     @StateObject private var central = HIDCentral()
 

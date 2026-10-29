@@ -18,7 +18,13 @@ struct ContentView: View {
                 guard connected else { return }
                 tab = .input
             }
-            .onAppear(perform: _onAppear)
+            .onChange(of: tab) { newTab in
+                OrientationController.apply(for: newTab)
+            }
+            .onAppear {
+                _onAppear()
+                OrientationController.apply(for: tab)
+            }
             .alert(L10n.Welcome.title, isPresented: $showWelcome) {
                 Button(L10n.Welcome.viewGuide) {
                     hasSeenWelcome = true
