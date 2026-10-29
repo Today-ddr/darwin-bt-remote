@@ -170,21 +170,90 @@ struct FullKeyboardView: View {
 
         return ZStack(alignment: .topLeading) {
             ForEach(placements, id: \.column) { placement in
-                FullKeyCapButton(
-                    id: KeyCapID(row: rowIndex, column: placement.column),
-                    key: placement.key,
-                    isCompact: isCompact,
-                    isArmed: isKeyArmed(placement.key),
-                    isShiftActive: isShiftActive,
-                    surfaceTouches: surfaceTouches,
-                    onPress: { handlePress(placement.key) },
-                    onRelease: { handleRelease(placement.key) }
+                keyCapCell(
+                    placement,
+                    row: rowIndex,
+                    gap: gap,
+                    isCompact: isCompact
                 )
                 .frame(width: placement.frame.width, height: placement.frame.height)
                 .offset(x: placement.frame.minX)
             }
         }
         .frame(width: width, height: height, alignment: .topLeading)
+    }
+
+    /// One grid cell. A normal cap fills it; the Up/Down cell is split into two
+    /// half-height caps separated by the same gap the rows use. Both halves are
+    /// ordinary cap buttons with their own touch layer, press state, accessibility
+    /// and action, so the two arrows stay independently pressable — a diagonal or
+    /// simultaneous two-finger press cannot pick the wrong one.
+    @ViewBuilder
+    private func keyCapCell(
+        _ placement: KeyPlacement,
+        row rowIndex: Int,
+        gap: CGFloat,
+        isCompact: Bool
+    ) -> some View {
+        let halfHeight = (placement.frame.height - gap) / 2
+        if let below = placement.key.stackedBelow {
+            VStack(spacing: gap) {
+                keyCapButton(
+                    placement.key,
+                    id: KeyCapID(row: rowIndex, column: placement.column),
+                    isCompact: isCompact
+                )
+                .frame(height: halfHeight)
+                keyCapButton(
+                    below,
+                    id: KeyCapID(row: rowIndex, column: placement.column, stack: 1),
+                    isCompact: isCompact
+                )
+                .frame(height: halfHeight)
+            }
+        } else {
+            keyCapButton(
+                placement.key,
+                id: KeyCapID(row: rowIndex, column: placement.column),
+                isCompact: isCompact
+            )
+        }
+    }
+
+    private func keyCapButton(
+        _ key: FullKeyCap,
+        id: KeyCapID,
+        isCompact: Bool
+    ) -> some View {
+        FullKeyCapButton(
+            id: id,
+            label: key.label,
+            accessibility: key.accessibility,
+            isCompact: isCompact,
+            isArmed: isKeyArmed(key),
+            isShiftActive: isShiftActive,
+            surfaceTouches: surfaceTouches,
+            onPress: { handlePress(key.action) },
+            onRelease: { handleRelease(key.action) }
+        )
+    }
+
+    private func keyCapButton(
+        _ key: FullKeyCap.Stacked,
+        id: KeyCapID,
+        isCompact: Bool
+    ) -> some View {
+        FullKeyCapButton(
+            id: id,
+            label: key.label,
+            accessibility: key.accessibility,
+            isCompact: isCompact,
+            isArmed: false,
+            isShiftActive: isShiftActive,
+            surfaceTouches: surfaceTouches,
+            onPress: { handlePress(key.action) },
+            onRelease: { handleRelease(key.action) }
+        )
     }
 
     private var isShiftActive: Bool {
@@ -202,8 +271,8 @@ struct FullKeyboardView: View {
         }
     }
 
-    private func handlePress(_ key: FullKeyCap) {
-        switch key.action {
+    private func handlePress(_ action: FullKeyCap.Action) {
+        switch action {
         case let .key(code):
             keyDown(code)
         case let .modifier(mod):
@@ -215,8 +284,8 @@ struct FullKeyboardView: View {
 
     /// A modifier is held only while a finger is on it: the release drops it from
     /// the report, and the last finger to leave is the one that does it.
-    private func handleRelease(_ key: FullKeyCap) {
-        switch key.action {
+    private func handleRelease(_ action: FullKeyCap.Action) {
+        switch action {
         case let .key(code):
             keyUp(code)
         case let .modifier(mod):
@@ -275,10 +344,12 @@ struct FullKeyboardView: View {
 // MARK: - Key press bubbles
 
 /// Where a cap sits in the layout. Stable for as long as the page is up, so several
-/// bubbles on screen at once each keep their own identity.
+/// bubbles on screen at once each keep their own identity. `stack` distinguishes the two
+/// halves of a vertically stacked cell, so each arrow's bubble is its own.
 private struct KeyCapID: Hashable {
     let row: Int
     let column: Int
+    var stack: Int = 0
 }
 
 /// A cap that is down right now: what its bubble has to draw, and where the cap is.
@@ -367,7 +438,8 @@ private struct KeyCapBubble: View {
 
 private struct FullKeyCapButton: View {
     let id: KeyCapID
-    let key: FullKeyCap
+    let label: FullKeyCap.Label
+    let accessibility: LocalizedStringKey
     let isCompact: Bool
     let isArmed: Bool
     let isShiftActive: Bool
@@ -376,10 +448,10 @@ private struct FullKeyCapButton: View {
     let onRelease: () -> Void
 
     @Environment(\.appTheme) private var appTheme
-    /// Held only while a finger on this cap is down. `key` stays a value type so a key can
-    /// never be stale across the `@State` snapshot, but the flag is dropped the moment the
-    /// view carrying it goes away — see `releaseIfStranded`.
-    @State private var pressedKey: FullKeyCap?
+    /// Held only while a finger on this cap is down. The flag is dropped the moment the
+    /// view carrying it goes away — see `releaseIfStranded`. It belongs to this cap alone,
+    /// so the two halves of a stacked cell press and lift independently.
+    @State private var isPressed = false
 
     var body: some View {
         ZStack {
@@ -391,20 +463,20 @@ private struct FullKeyCapButton: View {
             RoundedRectangle(cornerRadius: 6)
                 .fill(isArmed ? Color.accentColor : appTheme.controlFill)
                 .allowsHitTesting(false)
-            KeyCapLabel(label: key.label, isCompact: isCompact, isArmed: isArmed, isShiftActive: isShiftActive)
+            KeyCapLabel(label: label, isCompact: isCompact, isArmed: isArmed, isShiftActive: isShiftActive)
                 .foregroundColor(isArmed ? .white : .primary)
                 .allowsHitTesting(false)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .opacity(pressedKey != nil ? 0.6 : 1)
+        .opacity(isPressed ? 0.6 : 1)
         // Only the cap that is down publishes its frame, so an idle keyboard sends the
         // overlay an empty list and nothing is drawn.
         .anchorPreference(key: KeyPressBubblePreference.self, value: .bounds) { anchor in
-            guard pressedKey != nil else { return [] }
+            guard isPressed else { return [] }
             return [
                 KeyPressBubble(
                     id: id,
-                    label: key.label,
+                    label: label,
                     isCompact: isCompact,
                     isArmed: isArmed,
                     isShiftActive: isShiftActive,
@@ -415,19 +487,19 @@ private struct FullKeyCapButton: View {
         .onDisappear { releaseIfStranded() }
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(.isButton)
-        .accessibilityLabel(key.accessibility)
+        .accessibilityLabel(accessibility)
     }
 
     private func press() {
-        guard pressedKey == nil else { return }
-        pressedKey = key
+        guard !isPressed else { return }
+        isPressed = true
         Haptics.tap(from: .keyboard)
         onPress()
     }
 
     private func release() {
-        guard pressedKey != nil else { return }
-        pressedKey = nil
+        guard isPressed else { return }
+        isPressed = false
         onRelease()
     }
 
@@ -436,7 +508,7 @@ private struct FullKeyCapButton: View {
     /// going with the view cannot latch anything, and the count below still names the finger
     /// that was on this cap so the surface total does not drift.
     private func releaseIfStranded() {
-        guard pressedKey != nil else { return }
+        guard isPressed else { return }
         surfaceTouches.touchUp()
         release()
     }
