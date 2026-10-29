@@ -42,6 +42,10 @@ enum L10n {
         static var openSetup: LocalizedStringKey {
             "remote.open_setup"
         }
+
+        static var moreActions: LocalizedStringKey {
+            "input.more_actions"
+        }
     }
 
     enum Section {

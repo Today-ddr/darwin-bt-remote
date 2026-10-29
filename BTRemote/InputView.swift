@@ -1,13 +1,15 @@
 import SwiftUI
 
 /// The input tab: one full-screen MacBook keyboard and one full-screen
-/// multi-touch trackpad, with the page switch pinned to the bottom.
+/// multi-touch trackpad, with the page switch in a reserved toolbar above the
+/// content.
 ///
 /// The tab owns the release coordinator, so leaving the page, leaving the app,
 /// losing the host or losing the HID service all release keyboard and pointer
 /// state through the same idempotent path.
 struct InputView: View {
     let goToSetup: () -> Void
+    let goToSettings: () -> Void
 
     @Environment(\.hid) private var hid
     @Environment(\.scenePhase) private var scenePhase
@@ -17,8 +19,12 @@ struct InputView: View {
     @StateObject private var releases = InputReleaseCoordinator()
 
     @MainActor
-    init(goToSetup: @escaping () -> Void) {
+    init(
+        goToSetup: @escaping () -> Void,
+        goToSettings: @escaping () -> Void
+    ) {
         self.goToSetup = goToSetup
+        self.goToSettings = goToSettings
     }
 
     private var selectedPage: InputPage {
@@ -55,11 +61,33 @@ struct InputView: View {
 
     private var content: some View {
         VStack(spacing: 0) {
+            inputToolbar
             pageContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            pageSwitcher
         }
         .background(appTheme.pageBackground)
+    }
+
+    /// The toolbar is a row of its own rather than an overlay: the switch and
+    /// the menu must never sit on top of a key cap or the trackpad surface.
+    private var inputToolbar: some View {
+        HStack(spacing: 8) {
+            Color.clear
+                .frame(width: 44, height: 44)
+
+            Spacer(minLength: 0)
+
+            pageSwitcher
+                .frame(maxWidth: 360)
+
+            Spacer(minLength: 0)
+
+            navigationMenu
+                .frame(width: 44, height: 44)
+        }
+        .padding(.horizontal, ChipMetrics.pageHorizontalPadding)
+        .padding(.top, 4)
+        .padding(.bottom, 6)
     }
 
     @ViewBuilder
@@ -71,7 +99,7 @@ struct InputView: View {
             TrackpadPanel(hid: hid, releases: releases)
                 .padding(.horizontal, 10)
                 .padding(.top, 8)
-                .padding(.bottom, 6)
+                .padding(.bottom, 10)
         }
     }
 
@@ -102,9 +130,46 @@ struct InputView: View {
                 .accessibilityAddTraits(selectedPage == page ? .isSelected : [])
             }
         }
-        .padding(.horizontal, ChipMetrics.pageHorizontalPadding)
-        .padding(.top, 6)
-        .padding(.bottom, 4)
+    }
+
+    /// Setup and Settings are the only entries: the input tab is already the
+    /// current page, so offering it back would be a no-op.
+    private var navigationMenu: some View {
+        Menu {
+            Button {
+                navigate(to: .setup)
+            } label: {
+                Label(L10n.Tab.setup, systemImage: AppTab.setup.icon)
+            }
+            Button {
+                navigate(to: .settings)
+            } label: {
+                Label(L10n.Tab.settings, systemImage: AppTab.settings.icon)
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .rotationEffect(.degrees(90))
+                .font(.system(size: 18, weight: .semibold))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel(Text(L10n.Input.moreActions))
+    }
+
+    /// A root tab change moves the input tab out of the hierarchy, but the host
+    /// must not wait for `onDisappear` to learn that a key or a pointer button
+    /// is up: release first, then navigate.
+    private func navigate(to tab: AppTab) {
+        Haptics.tap(from: .keyboard)
+        releases.releaseAll(using: hid)
+        switch tab {
+        case .setup:
+            goToSetup()
+        case .settings:
+            goToSettings()
+        case .input:
+            break
+        }
     }
 
     /// Releasing before the animation is the contract: the other page must not
@@ -144,6 +209,6 @@ struct NotConnectedView: View {
 
 #if DEBUG
     #Preview {
-        InputView(goToSetup: {})
+        InputView(goToSetup: {}, goToSettings: {})
     }
 #endif

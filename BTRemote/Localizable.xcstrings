@@ -2653,6 +2653,23 @@
         }
       }
     },
+    "input.more_actions": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More actions"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更多操作"
+          }
+        }
+      }
+    },
     "input.trackpad": {
       "extractionState": "manual",
       "localizations": {

@@ -41,9 +41,12 @@ struct ContentView: View {
             SetupView()
                 .tabItem { Label(L10n.Tab.setup, systemImage: "gearshape") }
                 .tag(AppTab.setup)
-            InputView(goToSetup: { tab = .setup })
-                .tabItem { Label(L10n.Tab.input, systemImage: "keyboard") }
-                .tag(AppTab.input)
+            InputView(
+                goToSetup: { tab = .setup },
+                goToSettings: { tab = .settings }
+            )
+            .tabItem { Label(L10n.Tab.input, systemImage: "keyboard") }
+            .tag(AppTab.input)
             SettingsView()
                 .tabItem { Label(L10n.Tab.settings, systemImage: "slider.horizontal.3") }
                 .tag(AppTab.settings)
