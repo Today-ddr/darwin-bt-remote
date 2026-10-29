@@ -128,14 +128,18 @@ struct SetupView: View {
             .map { uuid in
                 let alias = names.name(for: uuid)
                 let subscribed = lowEnergy.subscribedCentrals.keys.contains(uuid)
+                let muted = lowEnergy.inactiveCentrals.contains(uuid)
+                let removed = lowEnergy.isBlocked(uuid)
                 return DeviceEntry(
                     id: uuid,
                     name: alias ?? "",
                     isNamed: alias != nil,
                     isSubscribed: subscribed,
-                    isActive: subscribed && lowEnergy.activeCentral == uuid,
-                    isMuted: lowEnergy.inactiveCentrals.contains(uuid),
-                    isRemoved: lowEnergy.isBlocked(uuid)
+                    // a muted or removed host is never shown as In Use: it cannot receive
+                    // input, and `hasControl` treats it the same way
+                    isActive: subscribed && !muted && !removed && lowEnergy.activeCentral == uuid,
+                    isMuted: muted,
+                    isRemoved: removed
                 )
             }
             .sorted { $0.id.uuidString < $1.id.uuidString }

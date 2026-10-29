@@ -3,23 +3,41 @@ import CoreBluetooth
 import os
 import SwiftUI
 
+/// Identity of one parked report.
+///
+/// A report ID alone is not an identity: the main keyboard report and the boot keyboard
+/// report both carry `ReportID.keyboard`, and they live in different characteristics with
+/// independent send queues. Keying on the ID alone let a boot key-up overwrite the parked
+/// main key-up (or the other way round), so one of the two hosts never saw its release.
+/// The characteristic's object identity is what actually separates the two destinations;
+/// the report ID is kept so diagnostics can name the kind of report.
+struct HIDPendingBroadcastKey: Hashable {
+    let reportID: UInt8
+    let characteristic: ObjectIdentifier
+}
+
 /// HID-over-GATT peripheral engine
 @MainActor
 final class HIDPeripheral: NSObject, ObservableObject {
     @Published private(set) var state: CBManagerState = .unknown
     @Published private(set) var isAdvertising = false
     @Published private(set) var isHIDServiceAdded = false
-    /// central identifier: the set of characteristic UUIDs it is currently subscribed to
-    @Published private(set) var subscribedCentrals: [UUID: Set<CBUUID>] = [:]
+    /// central identifier: the actual characteristic instances it is currently subscribed to.
+    ///
+    /// Object identity, not `CBUUID`: every HID report characteristic shares UUID 0x2A4D,
+    /// so a set of UUIDs cannot tell the keyboard report from the mouse report, and
+    /// notifying one would have been indistinguishable from notifying the other.
+    @Published private(set) var subscribedCentrals: [UUID: Set<ObjectIdentifier>] = [:]
     /// broadcasts skip inactive hosts; a muted host never receives input and can never hold
     /// control either, so that muting it cannot leave every report with nowhere to go
     @Published private(set) var inactiveCentrals: Set<UUID> = []
     @Published private(set) var connectedCentrals: Set<UUID> = []
-    /// the one host that currently receives input. Control is sticky while its host is
-    /// present: only the user switches it, and a host that reconnects can never take it from
-    /// one that holds it. When the holder unsubscribes and leaves the list, control is handed
-    /// to another host that is already subscribed instead of being left with nobody; see
-    /// `handOverControl`.
+    /// the host that last held control. It is sticky while that host can actually receive:
+    /// only the user switches it, and a host that reconnects cannot take it from one that
+    /// holds it. While the named host is muted or removed `hasControl` is false, so a new
+    /// eligible subscriber claims it in `didSubscribeTo`; when the holder unsubscribes and
+    /// leaves the list, `handOverControl` gives it to another subscribed host instead of
+    /// leaving it with nobody.
     @Published private(set) var activeCentral: UUID?
     @Published private(set) var keyboardLEDs: KeyboardLEDs = []
     @Published private(set) var lastError: String?
@@ -38,12 +56,14 @@ final class HIDPeripheral: NSObject, ObservableObject {
     private var subscribeOrder: [UUID: UInt64] = [:]
     private var subscribeCounter: UInt64 = 0
 
-    /// Whether anyone can receive input at all: the active host is still subscribed. Muting,
-    /// removing or losing that host makes this false without clearing `activeCentral`, so the
-    /// control state reads off one place instead of being re-derived from those sets, and
-    /// input refused because this is false must not be parked as if it were merely waiting.
+    /// Whether anyone can receive input at all: the active host is still subscribed, is
+    /// not muted and is not removed. Muting, removing or losing that host makes this false
+    /// without clearing `activeCentral`, so the control state reads off one place instead
+    /// of being re-derived from those sets. A muted or removed host therefore cannot keep
+    /// control away from a host that arrives later: `didSubscribeTo` claims when this is
+    /// false.
     var hasControl: Bool {
-        activeCentral.map { subscribedCentrals[$0] != nil } ?? false
+        !activeRecipients().isEmpty
     }
 
     var advertiseLocalName: String = UserDefaults.standard.string(forKey: AppSettings.advertisedNameKey) ?? L10n.Bluetooth.advertisedName
@@ -61,42 +81,57 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// subscriber of the old one claim control of the new one.
     private var pManager: CBPeripheralManager?
     private var batteryServiceObj: CBMutableService?
-    private var deviceInfoServiceObj: CBMutableService?
-    private var hidServiceObj: CBMutableService?
     private var isHIDServiceAllowed = false
     private var isReadyToSendNotification = true
     /// What `suspend` interrupted, so `resume` restores that rather than the maximum: a
     /// suspension with the user's advertising already off must not come back on the air.
     private var wasAdvertisingBeforeSuspend = false
+    /// Protocol Mode characteristic value: 0x01 report protocol, 0x00 boot protocol.
+    /// HOGP lets a host switch it, so the read has to answer with what was written.
+    private var currentProtocolMode: UInt8 = 0x01
 
     private var charsByReportID: [UInt8: CBMutableCharacteristic] = [:]
     private var bootMouseInputChar: CBMutableCharacteristic?
     private var bootKeyboardInputChar: CBMutableCharacteristic?
-    private var bootKeyboardOutputChar: CBMutableCharacteristic?
     private var batteryLevelChar: CBMutableCharacteristic?
     private var serviceChangedObj: CBMutableService?
     private var serviceChangedArmed = false
     private static let serviceChangedGrace: UInt64 = 2_000_000_000
 
     /// last-sent payloads for reads and new subscriptions
-    private var cachedReports: [UInt8: Data] = [
-        ReportID.mouse.rawValue: MouseReport.zero.data,
-        ReportID.keyboard.rawValue: KeyboardReport.zero.data,
-        ReportID.systemControl.rawValue: SystemControlReport.zero.data,
-        ReportID.consumerControl.rawValue: ConsumerReport.zero.data,
-        ReportID.digitizer.rawValue: DigitizerReport.zero.data
-    ]
+    private var cachedReports: [UInt8: Data] = HIDPeripheral.zeroInputReports
 
-    /// One parked payload per report ID. A single shared slot let any later report evict a
-    /// parked one, so a key-up waiting on the send queue was silently replaced by a mouse
-    /// move or a battery update and never reached the host — which then repeated the key
-    /// forever because it still believed the key was held.
+    private static var zeroInputReports: [UInt8: Data] {
+        [
+            ReportID.mouse.rawValue: MouseReport.zero.data,
+            ReportID.keyboard.rawValue: KeyboardReport.zero.data,
+            ReportID.systemControl.rawValue: SystemControlReport.zero.data,
+            ReportID.consumerControl.rawValue: ConsumerReport.zero.data,
+            ReportID.digitizer.rawValue: DigitizerReport.zero.data
+        ]
+    }
+
+    /// One parked payload per (report ID, characteristic instance). A single slot per ID let
+    /// any later report evict a parked one, and keying by ID alone still made the main and
+    /// boot keyboard reports overwrite each other — a key-up waiting on the send queue could
+    /// be silently replaced and never reach the host, which then repeated the key forever
+    /// because it still believed the key was held.
     ///
     /// Each entry also remembers the host it was addressed to. Only one host receives input
     /// at a time, so anything still queued at a switch belongs to the host that just lost
     /// control and is dropped rather than replayed on the new one; the report of the new
     /// active host that could not be sent is parked on its own turn.
-    private var pendingBroadcasts: [UInt8: (data: Data, char: CBMutableCharacteristic, target: UUID?)] = [:]
+    private struct PendingBroadcast {
+        let data: Data
+        let char: CBMutableCharacteristic
+        let target: UUID
+        let sequence: UInt64
+    }
+
+    private var pendingBroadcasts: [HIDPendingBroadcastKey: PendingBroadcast] = [:]
+    /// Monotonic across the life of the peripheral; the drain uses it to preserve the order
+    /// in which reports were written, independent of dictionary iteration order.
+    private var parkSequence: UInt64 = 0
 
     func start() {
         isHIDServiceAllowed = true
@@ -273,14 +308,11 @@ final class HIDPeripheral: NSObject, ObservableObject {
         isReadyToSendNotification = true
         pendingBroadcasts.removeAll()
         batteryServiceObj = nil
-        deviceInfoServiceObj = nil
-        hidServiceObj = nil
         serviceChangedObj = nil
         serviceChangedArmed = false
         batteryLevelChar = nil
         bootMouseInputChar = nil
         bootKeyboardInputChar = nil
-        bootKeyboardOutputChar = nil
         charsByReportID.removeAll()
         // link state, all of it: the subscribers, the live `CBCentral` objects and the
         // connected set were the old manager's knowledge and do not survive releasing it
@@ -319,8 +351,14 @@ final class HIDPeripheral: NSObject, ObservableObject {
 
     func sendKeyboard(_ report: KeyboardReport) {
         broadcast(report.data, reportID: .keyboard)
-        // boot mode hosts read this characteristic instead
-        bootKeyboardInputChar.map { _ = updateValue(report.data, for: $0, reportID: ReportID.keyboard.rawValue) }
+        // Boot-protocol hosts read this characteristic instead. Only the host that actually
+        // subscribed to it gets a copy: a host in report protocol never subscribes here, so
+        // writing unconditionally would either be dropped or — worse — park a duplicate
+        // key-up that competes with the main report's own queue.
+        guard let bootChar = bootKeyboardInputChar,
+              !activeRecipients(for: bootChar).isEmpty
+        else { return }
+        _ = updateValue(report.data, for: bootChar, reportID: ReportID.keyboard.rawValue)
     }
 
     func sendConsumer(_ report: ConsumerReport) {
@@ -345,6 +383,9 @@ final class HIDPeripheral: NSObject, ObservableObject {
         }
         _trace("mute \(uuid): \(inactiveCentrals.contains(uuid))")
         _reportDroppedInputIfNone()
+        // unmuting the active host makes it a recipient again; a notice raised by the mute
+        // has to come down even when nothing was parked to retry
+        _clearDroppedInputNoticeIfHeld()
         _drainIfUnblocked()
     }
 
@@ -358,20 +399,25 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// user restores it: the block outlives unsubscribes and reconnects, so a host
     /// that comes back on its own does not get a second chance at the input.
     func removeCentral(_ uuid: UUID) {
-        // release before the host is cut off: a key-up sent afterwards goes nowhere, and
-        // the host would be left holding whatever was down when control was taken away.
-        // Control is then left on nobody rather than handed to another subscriber: a removal
-        // must not silently reroute input, so it stays dead until the user restores the row
-        // or a host subscribes again. The notice in `_reportDroppedInputIfNone` is what keeps
-        // that from being invisible.
+        // release before the host is cut off, and only while it can still receive: a key-up
+        // sent after the removal goes nowhere and would leave the host holding whatever was
+        // down when control was taken away. Control is then left on nobody rather than
+        // handed to another subscriber: a removal must not silently reroute input, so it
+        // stays dead until the user restores the row or a host subscribes again. The notice
+        // in `_reportDroppedInputIfNone` is what keeps that from being invisible.
         let wasActive = activeCentral == uuid
+        if wasActive, hasControl {
+            _releaseHeldInput()
+        }
         if wasActive {
-            _releaseHeldKeys()
             activeCentral = nil
         }
         blockedCentrals.insert(uuid)
         _saveBlockedCentrals()
         inactiveCentrals.remove(uuid)
+        if wasActive {
+            _dropParkedBroadcastsFromPreviousHost()
+        }
         objectWillChange.send()
     }
 
@@ -413,19 +459,22 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// parked and nothing is sent — while the row showed it as In Use. Refusing here keeps
     /// what is displayed and what is routed the same thing.
     ///
-    /// Keys that are still down are released before the input is rerouted, so the host
-    /// losing control is not left with a latched key.
+    /// Every input the old host could be holding is released before the reroute, and the new
+    /// host starts from a full zero baseline: keyboard, mouse and digitizer, not just the
+    /// keys of the last report.
     func makeActive(_ uuid: UUID) {
-        guard subscribedCentrals[uuid] != nil,
+        guard holdsInputSubscription(uuid),
               !blockedCentrals.contains(uuid),
               !inactiveCentrals.contains(uuid),
               activeCentral != uuid
         else { return }
-        // the host losing control is told that nothing is held any more, and the new one
-        // starts from the same quiet baseline rather than whatever it last knew
-        _releaseHeldKeys()
+        // the host losing control is told that nothing is held any more, but only while it
+        // can still receive it — a muted host has no recipient and a release would be noise
+        if hasControl {
+            _releaseHeldInput()
+        }
         activeCentral = uuid
-        _releaseHeldKeys()
+        _releaseHeldInput()
         _trace("active host: \(uuid)")
         // the previous host's parked reports go, and this host's own backlog — a key-up
         // parked while it was muted, for one — is retried now that it can receive again
@@ -433,11 +482,14 @@ final class HIDPeripheral: NSObject, ObservableObject {
         _drainIfUnblocked()
     }
 
-    /// Releases everything a host could be holding. One zeroed report covers all of it:
-    /// every key the full keyboard can press lives in that report, and clearing it is
-    /// what tells the host nothing is down any more.
-    private func _releaseHeldKeys() {
+    /// Releases every kind of input a host could be holding: keyboard keys and modifiers,
+    /// mouse buttons (and any unfinished motion), and the digitizer's contacts. One zeroed
+    /// report per characteristic is what tells the host nothing is down any more; a report
+    /// type nobody is subscribed to quietly does nothing.
+    private func _releaseHeldInput() {
         sendKeyboard(.zero)
+        sendMouse(.zero)
+        sendDigitizer(.zero)
     }
 
     /// Gives control to a subscribed, unblocked and unmuted host after the one that held it
@@ -461,17 +513,21 @@ final class HIDPeripheral: NSObject, ObservableObject {
         guard hasControl == false else { return }
         let next = subscribedCentrals.keys
             .filter { uuid in
-                !blockedCentrals.contains(uuid) && !inactiveCentrals.contains(uuid)
+                holdsInputSubscription(uuid)
+                    && !blockedCentrals.contains(uuid)
+                    && !inactiveCentrals.contains(uuid)
             }
             .max { subscribeOrder[$0] ?? 0 < subscribeOrder[$1] ?? 0 }
         guard let next else { return }
         activeCentral = next
         _trace("active host: \(next) (handover)")
         // the report of the host that just lost control goes with it, and the new one is
-        // told nothing is held. `didSubscribeTo` is left to replay its cached state where
-        // that applies, so a host is not brought up to date twice over a subscribe.
+        // given a complete zero baseline — keyboard, mouse and digitizer — so it cannot
+        // inherit a held state from the host that left. `didSubscribeTo` is left to replay
+        // its cached state where that applies, so a host is not brought up to date twice
+        // over a subscribe.
         _dropParkedBroadcastsFromPreviousHost()
-        _releaseHeldKeys()
+        _releaseHeldInput()
         _drainIfUnblocked()
     }
 
@@ -497,10 +553,10 @@ final class HIDPeripheral: NSObject, ObservableObject {
     }
 
     /// Whether input is going nowhere: nobody holds control, or the host that does cannot
-    /// receive it — muted, blocked, or no longer linked to us at the Bluetooth level. This is
-    /// exactly the condition that makes an input drop silent, and the one the notice speaks
-    /// for. `hasControl` is not the same thing: a muted or unlinked host still reads as
-    /// holding control while every report is dropped.
+    /// receive it — muted, blocked, or no longer linked to us at the Bluetooth level. This
+    /// is exactly the condition that makes an input drop silent, and the one the notice
+    /// speaks for. A report type the active host happens not to subscribe to is *not* this
+    /// condition: it is not an error to be subscribed to the keyboard but not the mouse.
     private var isDroppingInput: Bool {
         activeRecipients().isEmpty
     }
@@ -510,9 +566,18 @@ final class HIDPeripheral: NSObject, ObservableObject {
         batteryLevel = clamped
         let asHIDReport = Data([clamped])
         cachedReports[ReportID.battery.rawValue] = asHIDReport
-        if let batteryLevelChar {
-            _ = updateValue(asHIDReport, for: batteryLevelChar, reportID: ReportID.battery.rawValue)
+        // Battery is device state, not input: it goes to every host that actually subscribed
+        // to the battery characteristic, even if none of them holds input control. No
+        // subscriber is a normal state here and must never raise the dropped-input notice.
+        guard let batteryLevelChar, let pManager else { return }
+        let recipients = subscribedCentrals.compactMap { uuid, chars -> CBCentral? in
+            guard chars.contains(ObjectIdentifier(batteryLevelChar)),
+                  !blockedCentrals.contains(uuid)
+            else { return nil }
+            return centralObjects[uuid]
         }
+        guard !recipients.isEmpty else { return }
+        _ = pManager.updateValue(asHIDReport, for: batteryLevelChar, onSubscribedCentrals: recipients)
     }
 
     /// if host connects but never subscribes (stale GATT cache), cycle a temp service to fire Service Changed so it re-discovers
@@ -526,6 +591,11 @@ final class HIDPeripheral: NSObject, ObservableObject {
     }
 
     private func _cycleServiceChangedIfUnsubscribed() {
+        // one attempt per arming: a host that read and left without ever subscribing would
+        // otherwise leave the flag set for the rest of the session, and the next host could
+        // never trigger the cycle at all. The grace above is what stops it from repeating
+        // faster than a host can discover.
+        serviceChangedArmed = false
         guard subscribedCentrals.isEmpty else { return }
         _cycleServiceChanged()
     }
@@ -614,11 +684,14 @@ final class HIDPeripheral: NSObject, ObservableObject {
             service.includedServices = [battery]
         }
 
+        // HOGP: the control point is written (suspend / exit suspend), not read. It carries
+        // no value this peripheral acts on, but declaring it writable is what lets a host
+        // send the command and get a response instead of leaving the ATT write unanswered.
         let controlPoint = CBMutableCharacteristic(
             type: HIDProfile.hidControlPoint,
-            properties: .read,
+            properties: [.writeWithoutResponse],
             value: nil,
-            permissions: .readEncryptionRequired
+            permissions: .writeEncryptionRequired
         )
 
         let protocolMode = CBMutableCharacteristic(
@@ -705,7 +778,6 @@ final class HIDPeripheral: NSObject, ObservableObject {
 
         bootMouseInputChar = bootMouseInput
         bootKeyboardInputChar = bootKbdInput
-        bootKeyboardOutputChar = bootKbdOutput
         charsByReportID[ReportID.systemControl.rawValue] = systemReportChar
         charsByReportID[ReportID.consumerControl.rawValue] = consumerReportChar
         charsByReportID[ReportID.mouse.rawValue] = mouseReportChar
@@ -744,12 +816,32 @@ final class HIDPeripheral: NSObject, ObservableObject {
         _ = updateValue(data, for: char, reportID: reportID.rawValue)
     }
 
+    /// Sends one report on one characteristic.
+    ///
+    /// `reportsDrop` separates "input reached nobody" from "this characteristic has no
+    /// subscriber". Only the first is the dropped-input state; battery, for example, may
+    /// legitimately have no subscriber and must not make the Setup page claim input is
+    /// being dropped. The recipients are the active host filtered by whether *this*
+    /// characteristic instance is in its subscription set — every report characteristic
+    /// shares UUID 0x2A4D, so a UUID check cannot make that distinction.
     @discardableResult
-    private func updateValue(_ data: Data, for char: CBMutableCharacteristic, reportID: UInt8? = nil) -> Bool {
+    private func updateValue(
+        _ data: Data,
+        for char: CBMutableCharacteristic,
+        reportID: UInt8? = nil,
+        reportsDrop: Bool = true
+    ) -> Bool {
         guard let pManager else { return false }
-        let recipients = activeRecipients()
-        guard let target = activeCentral, !recipients.isEmpty else {
-            _reportDroppedInputIfNone()
+        guard let target = activeCentral, hasControl else {
+            if reportsDrop {
+                _reportDroppedInputIfNone()
+            }
+            return false
+        }
+        let recipients = activeRecipients(for: char)
+        guard !recipients.isEmpty else {
+            // the host holds control but is not subscribed to this characteristic: there is
+            // nowhere for this report to go, and that is not the dropped-input state
             return false
         }
         if !isReadyToSendNotification {
@@ -765,27 +857,38 @@ final class HIDPeripheral: NSObject, ObservableObject {
             // early and the notice had no way back off the screen.
             _clearDroppedInputNoticeIfHeld()
         } else {
-            // the queue is full: keep this report, replacing only an older one of its own kind
+            // the queue is full: keep this report, replacing only an older one of its own
+            // (report ID, characteristic) pair
             isReadyToSendNotification = false
             park(data, for: char, reportID: reportID, target: target)
         }
         return accepted
     }
 
-    /// Parks a report that could not be sent, keyed by report ID. Where the ID is unknown the
-    /// characteristic stands in for it, so an unidentified report still cannot overwrite one
-    /// from another characteristic. The target is the host the report was written for, which
-    /// is whoever was receiving input when it was parked: input that had no host to go to was
-    /// dropped where it was written, not parked, so a parked report is never re-routed to a
-    /// host that turns up later (see `updateValue` and `_reportDroppedInputIfNone`).
-    private func park(_ data: Data, for char: CBMutableCharacteristic, reportID id: UInt8?, target: UUID?) {
-        pendingBroadcasts[id ?? reportID(forCharacteristic: char) ?? 0xF0] = (data, char, target)
+    /// Parks a report that could not be sent, keyed by the characteristic instance and the
+    /// report ID. Two characteristics that share UUID 0x2A4D — the main and boot keyboard
+    /// reports, for instance — therefore own independent slots and can never overwrite each
+    /// other's key-up. The target is the host the report was written for, which is whoever
+    /// was receiving input when it was parked: input that had no host to go to was dropped
+    /// where it was written, not parked, so a parked report is never re-routed to a host
+    /// that turns up later (see `updateValue` and `_reportDroppedInputIfNone`).
+    private func park(_ data: Data, for char: CBMutableCharacteristic, reportID id: UInt8?, target: UUID) {
+        parkSequence += 1
+        let key = HIDPendingBroadcastKey(
+            reportID: id ?? 0xF0,
+            characteristic: ObjectIdentifier(char)
+        )
+        pendingBroadcasts[key] = PendingBroadcast(
+            data: data,
+            char: char,
+            target: target,
+            sequence: parkSequence
+        )
     }
 
     /// Re-sends every parked report, oldest first. A report that fails again simply stays
-    /// parked, and each ID is drained independently, so no report type can evict another.
-    /// Only one host receives input, so a report parked by the host that lost control in
-    /// the meantime is dropped rather than delivered to its replacement.
+    /// parked, and each (report ID, characteristic) pair is drained independently, so no
+    /// report type or characteristic can evict another.
     ///
     /// Congestion is what this drain remains for: a report that is refused again here leaves
     /// the flag false, so `peripheralManagerIsReady` is what brings the next attempt. Being
@@ -794,19 +897,29 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// until a new report happens to be written (see `_drainIfUnblocked`).
     private func drainPendingBroadcasts() {
         guard hasParkedBroadcasts, let pManager else { return }
-        for id in pendingBroadcasts.keys.sorted() {
-            guard let entry = pendingBroadcasts[id] else { continue }
+        let ordered = pendingBroadcasts
+            .map { ($0.key, $0.value) }
+            .sorted { $0.1.sequence < $1.1.sequence }
+        for (key, entry) in ordered {
+            // the snapshot can name an entry that has since been replaced or removed
+            guard pendingBroadcasts[key] != nil else { continue }
             // a report left over from a previous host is dropped: the host it was written
             // for no longer receives input. Congestion is left to report itself below, so
             // nothing is discarded while the active host is merely muted or away.
             guard entry.target == activeCentral else {
-                pendingBroadcasts.removeValue(forKey: id)
+                pendingBroadcasts.removeValue(forKey: key)
                 continue
             }
             // no recipient is why it was parked, not something to spin on: leave it parked
             // and let the change that makes a recipient available retry it
-            let recipients = activeRecipients()
-            guard !recipients.isEmpty else { return }
+            guard hasControl else { return }
+            let recipients = activeRecipients(for: entry.char)
+            guard !recipients.isEmpty else {
+                // the active host no longer subscribes to this characteristic, so this entry
+                // can never reach it; drop it instead of keeping it forever
+                pendingBroadcasts.removeValue(forKey: key)
+                continue
+            }
             guard pManager.updateValue(entry.data, for: entry.char, onSubscribedCentrals: recipients) else {
                 // the queue is full: the flag goes false so the next attempt comes from
                 // `peripheralManagerIsReady`, as it always has, and this entry and the rest
@@ -815,7 +928,7 @@ final class HIDPeripheral: NSObject, ObservableObject {
                 _clearDroppedInputNoticeIfHeld()
                 return
             }
-            pendingBroadcasts.removeValue(forKey: id)
+            pendingBroadcasts.removeValue(forKey: key)
             _clearDroppedInputNoticeIfHeld()
         }
     }
@@ -851,11 +964,13 @@ final class HIDPeripheral: NSObject, ObservableObject {
 
     /// Retracts a report that was parked for the host that just lost control, the way a
     /// switch discards it during a drain: the next host should not receive input the old one
-    /// was meant to get. It is what draining used to do when a switch moved the target, and
-    /// the switch and the handover would otherwise have to wait for a drain of their own.
+    /// was meant to get. The key snapshot is taken first because removing from a dictionary
+    /// while iterating it is not supported.
     private func _dropParkedBroadcastsFromPreviousHost() {
-        for (id, entry) in pendingBroadcasts where entry.target != nil && entry.target != activeCentral {
-            pendingBroadcasts.removeValue(forKey: id)
+        for key in Array(pendingBroadcasts.keys) {
+            if pendingBroadcasts[key]?.target != activeCentral {
+                pendingBroadcasts.removeValue(forKey: key)
+            }
         }
     }
 
@@ -877,10 +992,11 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// Every other subscriber stays linked at the Bluetooth level and receives nothing —
     /// a peripheral cannot drop one, so exclusivity here means exclusive *input*, not
     /// exclusive connection. Muting is a separate filter on top of that: it suppresses
-    /// the active host's input without giving control to anyone else.
+    /// the active host's input without giving control to anyone else, and because this
+    /// returns empty for a muted host, `hasControl` is false while it is muted.
     private func activeRecipients() -> [CBCentral] {
         guard let activeCentral,
-              subscribedCentrals[activeCentral] != nil,
+              holdsInputSubscription(activeCentral),
               !inactiveCentrals.contains(activeCentral),
               !blockedCentrals.contains(activeCentral),
               let central = centralObjects[activeCentral]
@@ -888,21 +1004,41 @@ final class HIDPeripheral: NSObject, ObservableObject {
         return [central]
     }
 
+    /// Whether this host subscribes to at least one characteristic that carries input.
+    /// A host that only subscribed to, say, battery level cannot receive input, so it must
+    /// not hold control away from a host that can.
+    private func holdsInputSubscription(_ uuid: UUID) -> Bool {
+        guard let subscriptions = subscribedCentrals[uuid] else { return false }
+        if let bootKeyboardInputChar, subscriptions.contains(ObjectIdentifier(bootKeyboardInputChar)) {
+            return true
+        }
+        if let bootMouseInputChar, subscriptions.contains(ObjectIdentifier(bootMouseInputChar)) {
+            return true
+        }
+        return charsByReportID.contains { id, char in
+            id != ReportID.keyboardLEDs.rawValue && subscriptions.contains(ObjectIdentifier(char))
+        }
+    }
+
+    /// The same recipient, restricted to hosts that are actually subscribed to this
+    /// characteristic instance. `CBUUID` cannot be the test: all HID report
+    /// characteristics share 0x2A4D, so only object identity distinguishes the keyboard
+    /// report from the mouse report, or the main report from the boot report.
+    private func activeRecipients(for char: CBMutableCharacteristic) -> [CBCentral] {
+        guard let activeCentral,
+              subscribedCentrals[activeCentral]?.contains(ObjectIdentifier(char)) == true,
+              !inactiveCentrals.contains(activeCentral),
+              !blockedCentrals.contains(activeCentral),
+              let central = centralObjects[activeCentral]
+        else { return [] }
+        return [central]
+    }
+
+    /// The report ID of a characteristic we installed. Identity only: a peripheral manager
+    /// has no restore identifier, so there is no such thing as a restored characteristic
+    /// here, and a UUID lookup would confuse the report characteristics that share 0x2A4D.
     private func reportID(forCharacteristic char: CBCharacteristic) -> UInt8? {
-        for (id, c) in charsByReportID where c.uuid == char.uuid && c === char as AnyObject {
-            return id
-        }
-        // fallback for restored characteristics
-        if char.uuid == HIDProfile.report,
-           let descriptor = (char as? CBMutableCharacteristic)?
-           .descriptors?
-           .first(where: { $0.uuid == HIDProfile.reportReference }),
-           let value = descriptor.value as? Data,
-           let id = value.first
-        {
-            return id
-        }
-        return nil
+        charsByReportID.first { $0.value === char as AnyObject }?.key
     }
 }
 
@@ -930,15 +1066,14 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
         }
         switch service.uuid {
         case HIDProfile.batteryService:
-            let dis = buildDeviceInfoService()
-            deviceInfoServiceObj = dis
-            peripheral.add(dis)
+            peripheral.add(buildDeviceInfoService())
         case HIDProfile.deviceInformationService:
             let hid = buildHIDService(includingBattery: batteryServiceObj)
-            hidServiceObj = hid
             peripheral.add(hid)
         case HIDProfile.hidService:
             isHIDServiceAdded = true
+            // `startAdvertisingNow` checks the intent, so a Stop during the install chain
+            // is not undone by this late callback
             startAdvertisingNow()
         default:
             break
@@ -968,37 +1103,46 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
         _trackInteraction(from: central)
         subscribeCounter += 1
         subscribeOrder[central.identifier] = subscribeCounter
-        subscribedCentrals[central.identifier, default: []].insert(characteristic.uuid)
+        // the characteristic instance, not its UUID: every report characteristic shares
+        // 0x2A4D, so a UUID set could not tell the keyboard report from the mouse report
+        subscribedCentrals[central.identifier, default: []].insert(ObjectIdentifier(characteristic))
         // subscribing is how a host reconnects, not a user action, so it carries no claim
         // to control: the first host claims an idle app, and after that only the user
-        // switches. Nothing holds control while input is going nowhere, so a host that
-        // arrives after a removal claims it back the same way. Muting is the other end of
-        // the same rule the rest of the engine keeps — a muted host holds nothing, even
-        // when it is the only one there. A silent steal is what this claim must never
-        // become: it fires only when no host at all is active, never over one that is.
-        if !hasControl, !blockedCentrals.contains(central.identifier), !inactiveCentrals.contains(central.identifier) {
+        // switches. `hasControl` is false while the active host is muted or removed, so a
+        // new host that is neither can take over instead of being locked out by a host that
+        // cannot receive anything. A silent steal is what this claim must never become: it
+        // fires only when no host can receive, never over one that can.
+        if !hasControl,
+           holdsInputSubscription(central.identifier),
+           !blockedCentrals.contains(central.identifier),
+           !inactiveCentrals.contains(central.identifier)
+        {
             activeCentral = central.identifier
             _trace("active host: \(central.identifier) (first claim)")
+            // a new host must not inherit anything the previous link held, and whatever was
+            // parked for that link is not this host's to receive
+            _dropParkedBroadcastsFromPreviousHost()
+            _releaseHeldInput()
         }
         _trace("subscribe: \(central.identifier) -> \(characteristic.uuid)")
         // input refused while nobody could hold it is retried once someone does, so a
         // report that was cut off by a removal reaches the host that takes over
         _drainIfUnblocked()
-        // current state is brought up to date only for the host that receives input: on a
-        // master report the characteristic header carries no central, so a replay would
-        // otherwise be broadcast to the active host whichever host had subscribed
-        guard activeCentral == central.identifier else { return }
-        if let id = reportID(forCharacteristic: characteristic),
-           let cached = cachedReports[id],
-           let char = charsByReportID[id]
-        {
-            _ = updateValue(cached, for: char)
-        } else if characteristic.uuid == HIDProfile.bootMouseInputReport, let bootMouseInputChar {
-            _ = updateValue(MouseReport.zero.data, for: bootMouseInputChar)
-        } else if characteristic.uuid == HIDProfile.bootKeyboardInputReport, let bootKeyboardInputChar {
-            _ = updateValue(KeyboardReport.zero.data, for: bootKeyboardInputChar, reportID: ReportID.keyboard.rawValue)
-        } else if characteristic.uuid == HIDProfile.batteryLevel, let batteryLevelChar {
-            _ = updateValue(Data([batteryLevel]), for: batteryLevelChar, reportID: ReportID.battery.rawValue)
+        // current state is brought up to date only for the host that receives input, and on
+        // the very characteristic it subscribed to: a master report characteristic carries
+        // no central identity, so replaying through `charsByReportID` would send on a
+        // different instance that this host may never have subscribed to
+        guard activeCentral == central.identifier,
+              let char = characteristic as? CBMutableCharacteristic
+        else { return }
+        if let id = reportID(forCharacteristic: char), let cached = cachedReports[id] {
+            _ = updateValue(cached, for: char, reportID: id, reportsDrop: false)
+        } else if characteristic.uuid == HIDProfile.bootMouseInputReport {
+            _ = updateValue(MouseReport.zero.data, for: char, reportID: ReportID.mouse.rawValue, reportsDrop: false)
+        } else if characteristic.uuid == HIDProfile.bootKeyboardInputReport {
+            _ = updateValue(KeyboardReport.zero.data, for: char, reportID: ReportID.keyboard.rawValue, reportsDrop: false)
+        } else if characteristic.uuid == HIDProfile.batteryLevel {
+            _ = updateValue(Data([batteryLevel]), for: char, reportID: ReportID.battery.rawValue, reportsDrop: false)
         }
     }
 
@@ -1010,7 +1154,7 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
         guard peripheral === pManager else { return }
         _trace("unsubscribe: \(central.identifier) <- \(characteristic.uuid)")
         guard var chars = subscribedCentrals[central.identifier] else { return }
-        chars.remove(characteristic.uuid)
+        chars.remove(ObjectIdentifier(characteristic))
         if chars.isEmpty {
             subscribedCentrals.removeValue(forKey: central.identifier)
             centralObjects.removeValue(forKey: central.identifier)
@@ -1029,6 +1173,14 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
             }
         } else {
             subscribedCentrals[central.identifier] = chars
+            // the host is still linked, but if the characteristic it just dropped was its
+            // last one carrying input, it can no longer hold control; hand it to a host
+            // that still can rather than leaving every report addressed to this one
+            if activeCentral == central.identifier, !holdsInputSubscription(central.identifier) {
+                activeCentral = nil
+                _dropParkedBroadcastsFromPreviousHost()
+                handOverControl()
+            }
         }
         // covers the one case a handover cannot: the host that left was the last one, so
         // input now has nowhere to go and says so instead of stopping silently. When control
@@ -1048,10 +1200,6 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
         _trackInteraction(from: request.central)
         scheduleServiceChanged()
         let value = readValue(forRequest: request)
-        guard let value else {
-            peripheral.respond(to: request, withResult: .invalidAttributeValueLength)
-            return
-        }
         guard request.offset <= value.count else {
             peripheral.respond(to: request, withResult: .invalidOffset)
             return
@@ -1060,12 +1208,12 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
         peripheral.respond(to: request, withResult: .success)
     }
 
-    private func readValue(forRequest request: CBATTRequest) -> Data? {
+    private func readValue(forRequest request: CBATTRequest) -> Data {
         switch request.characteristic.uuid {
         case HIDProfile.batteryLevel: return Data([batteryLevel])
         case HIDProfile.hidInformation: return HIDProfile.hidInformationValue
         case HIDProfile.reportMap: return HIDProfile.reportMapData
-        case HIDProfile.protocolMode: return Data([0x01]) // report protocol
+        case HIDProfile.protocolMode: return Data([currentProtocolMode])
         case HIDProfile.manufacturerName: return HIDProfile.manufacturerNameValue
         case HIDProfile.modelNumber: return HIDProfile.modelNumberValue
         case HIDProfile.pnpID: return HIDProfile.pnpIDValue
@@ -1074,26 +1222,28 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
                 return cachedReports[id] ?? Data()
             }
             return Data()
-        case HIDProfile.bootMouseInputReport: return cachedReports[ReportID.mouse.rawValue]
-        case HIDProfile.bootKeyboardInputReport: return cachedReports[ReportID.keyboard.rawValue]
+        case HIDProfile.bootMouseInputReport: return cachedReports[ReportID.mouse.rawValue] ?? Data()
+        case HIDProfile.bootKeyboardInputReport: return cachedReports[ReportID.keyboard.rawValue] ?? Data()
         default: return Data()
         }
     }
 
     func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
         guard peripheral === pManager else { return }
+        // Every request in the batch needs its own response. Responding only to the first
+        // leaves the others waiting on an ATT transaction that will never complete, and the
+        // host then stalls its next write — the keyboard LED output, for one.
         for request in requests {
             _trace("write: \(request.central.identifier) -> \(request.characteristic.uuid)")
             _trackInteraction(from: request.central)
-            handleWriteRequest(request)
-        }
-        if let first = requests.first {
-            peripheral.respond(to: first, withResult: .success)
+            let result = handleWriteRequest(request)
+            peripheral.respond(to: request, withResult: result)
         }
     }
 
-    private func handleWriteRequest(_ request: CBATTRequest) {
-        guard let value = request.value else { return }
+    /// Applies one write and returns the ATT result for it.
+    private func handleWriteRequest(_ request: CBATTRequest) -> CBATTError.Code {
+        guard let value = request.value else { return .invalidAttributeValueLength }
         switch request.characteristic.uuid {
         case HIDProfile.bootKeyboardOutputReport:
             if let byte = value.first {
@@ -1105,10 +1255,18 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
             {
                 keyboardLEDs = KeyboardLEDs(byte: byte)
             }
-        case HIDProfile.protocolMode, HIDProfile.hidControlPoint:
+        case HIDProfile.protocolMode:
+            // 0x00 boot protocol, 0x01 report protocol; remember it so a read answers with
+            // the mode the host selected instead of a hard-coded value
+            if let mode = value.first {
+                currentProtocolMode = mode
+            }
+        case HIDProfile.hidControlPoint:
+            // suspend / exit suspend: no local behavior to apply, but the write is accepted
             break
         default:
             break
         }
+        return .success
     }
 }
