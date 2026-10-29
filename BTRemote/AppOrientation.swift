@@ -16,12 +16,17 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 }
 
 enum AppOrientationPolicy {
+    /// The input page is the keyboard and the trackpad, which need the long edge.
+    /// Setup and Settings are portrait pages: the dock that is the only navigation
+    /// on those tabs is portrait-only, and keeping them portrait means opening either
+    /// one from the input page asks the system to turn the device back, instead of
+    /// leaving a landscape page with no dock and no way out.
     static func mask(for tab: AppTab) -> UIInterfaceOrientationMask {
         switch tab {
         case .input:
             .landscape
         case .setup, .settings:
-            .all
+            .portrait
         }
     }
 }
@@ -55,9 +60,19 @@ enum OrientationController {
             // sideloaded app sets the undocumented UIDevice orientation key and
             // asks UIKit to re-evaluate. Best-effort and iOS 15 only; the
             // delegate mask above stays authoritative for what is allowed.
+            //
+            // Only the two masks the policy actually returns get a request:
+            // there is no single orientation that stands for `.all`, and
+            // pretending there is would turn the device for a page that allows
+            // every orientation.
             if mask == .landscape {
                 UIDevice.current.setValue(
                     UIInterfaceOrientation.landscapeRight.rawValue,
+                    forKey: "orientation"
+                )
+            } else if mask == .portrait {
+                UIDevice.current.setValue(
+                    UIInterfaceOrientation.portrait.rawValue,
                     forKey: "orientation"
                 )
             }

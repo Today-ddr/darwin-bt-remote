@@ -1,15 +1,18 @@
 import Foundation
 
 /// Everything the on-screen keyboard holds: the keys and modifier keys currently
-/// down, and the Caps Lock latch.
+/// down.
 ///
 /// Kept apart from the view so the press/release transitions and the report they
 /// produce are plain logic: the view forwards touch callbacks and sends whatever
 /// `report` returns, and the tests exercise the same transitions without a view.
+///
+/// Caps Lock is deliberately absent. It is a state the *host* keeps and reports
+/// back through the HID LED output, not something this app latches; the keyboard
+/// only sends the Caps Lock key tap and draws the LED state it is given.
 struct KeyboardInputState: Equatable {
     private(set) var keys = KeyPressTracker<Keycode>()
     private(set) var modifiers = KeyPressTracker<KeyboardModifiers>()
-    private(set) var isCapsLockOn = false
 
     var isEmpty: Bool {
         keys.isEmpty && modifiers.isEmpty
@@ -21,7 +24,7 @@ struct KeyboardInputState: Equatable {
     }
 
     var isShiftActive: Bool {
-        heldModifiers.contains(.leftShift) || heldModifiers.contains(.rightShift) || isCapsLockOn
+        heldModifiers.contains(.leftShift) || heldModifiers.contains(.rightShift)
     }
 
     /// Returns true on the first finger on the key.
@@ -48,11 +51,6 @@ struct KeyboardInputState: Equatable {
         modifiers.release(mod)
     }
 
-    /// Caps Lock is a latch, not a held key: a tap flips it and no release follows.
-    mutating func toggleCapsLock() {
-        isCapsLockOn.toggle()
-    }
-
     /// Clears every held key and modifier. Returns true when there was host-visible
     /// state to clear, so a redundant call sends no second release.
     @discardableResult
@@ -66,15 +64,15 @@ struct KeyboardInputState: Equatable {
     /// The report for the state as it stands.
     var report: KeyboardReport {
         KeyboardReport(
-            modifiers: effectiveModifiers,
+            modifiers: heldModifiers,
             keys: keys.heldKeys.sorted { $0.rawValue < $1.rawValue }
         )
     }
 
     /// The current report with one more key inserted, used for the Caps Lock tap.
-    /// It carries the held modifiers as they are, not the synthetic Shift below:
-    /// the tap reports the Caps Lock key itself, and the held keys follow in a
-    /// second report.
+    /// It carries the held modifiers as they are: the tap reports the Caps Lock key
+    /// itself, and the held keys follow in a second report. Nothing here synthesises
+    /// Shift — the host owns the Caps Lock state and the LED it reports back.
     func report(adding key: Keycode) -> KeyboardReport {
         var held = keys.heldKeys
         held.insert(key)
@@ -82,25 +80,5 @@ struct KeyboardInputState: Equatable {
             modifiers: heldModifiers,
             keys: held.sorted { $0.rawValue < $1.rawValue }
         )
-    }
-
-    /// Caps Lock folds into the report as a Shift over held letters only, which is
-    /// what the caps show and what makes the host type the uppercase character.
-    private var effectiveModifiers: KeyboardModifiers {
-        var mods = heldModifiers
-        if isCapsLockOn, keys.heldKeys.contains(where: isLetter) {
-            mods.insert(.leftShift)
-        }
-        return mods
-    }
-
-    private func isLetter(_ key: Keycode) -> Bool {
-        switch key {
-        case .a, .b, .c, .d, .e, .f, .g, .h, .i, .j, .k, .l, .m,
-             .n, .o, .p, .q, .r, .s, .t, .u, .v, .w, .x, .y, .z:
-            true
-        default:
-            false
-        }
     }
 }

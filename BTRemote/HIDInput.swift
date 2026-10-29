@@ -12,6 +12,10 @@ struct HIDInput {
     let isConnected: Bool
     let activeError: String?
     let batteryLevel: UInt8
+    /// The host's Caps Lock LED, as reported in the HID LED output report. It is
+    /// the only Caps Lock state the app has: the device that owns the keyboard
+    /// decides what Caps Lock means, and the LED is the authority on it.
+    let isCapsLockOn: Bool
 
     func tap(_ key: Keycode, modifiers: KeyboardModifiers = []) {
         sendKeyboard(KeyboardReport(modifiers: modifiers, keys: [key]))
@@ -50,14 +54,16 @@ extension HIDInput {
             isActive: lowEnergy.isHIDServiceAdded,
             isConnected: lowEnergy.connectedCentrals.contains { !lowEnergy.inactiveCentrals.contains($0) },
             activeError: lowEnergy.lastError,
-            batteryLevel: lowEnergy.batteryLevel
+            batteryLevel: lowEnergy.batteryLevel,
+            isCapsLockOn: lowEnergy.keyboardLEDs.contains(.capsLock)
         )
     }
 
     static var unavailable: HIDInput {
         HIDInput(
             sendMouse: { _ in }, sendKeyboard: { _ in }, updateBattery: { _ in },
-            isActive: false, isConnected: false, activeError: nil, batteryLevel: 0
+            isActive: false, isConnected: false, activeError: nil, batteryLevel: 0,
+            isCapsLockOn: false
         )
     }
 }

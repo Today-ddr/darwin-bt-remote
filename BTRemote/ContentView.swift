@@ -2,6 +2,12 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var tab = AppTab.setup
+    /// Opening the input page automatically is a first-connection convenience, not a
+    /// rule that every later connection re-applies: coming back to the foreground
+    /// reconnects the host, and forcing the input tab then would interrupt a user who
+    /// is in the middle of Setup or Settings. Not persisted, so a relaunch still
+    /// welcomes the first connection with the input page.
+    @State private var didAutoOpenInput = false
 
     @Environment(\.hid) private var hid
     @Environment(\.appTheme) private var appTheme
@@ -9,7 +15,8 @@ struct ContentView: View {
     var body: some View {
         rootTabs
             .onChange(of: hid.isConnected) { connected in
-                guard connected else { return }
+                guard connected, !didAutoOpenInput else { return }
+                didAutoOpenInput = true
                 tab = .input
             }
             .onChange(of: tab) { newTab in

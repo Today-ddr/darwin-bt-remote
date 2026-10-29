@@ -48,29 +48,39 @@ final class KeyboardInputStateTests: XCTestCase {
         sut.pressKey(.a)
         sut.pressModifier(.leftShift)
 
-        sut.toggleCapsLock()
+        let tap = sut.report(adding: .capsLock)
 
-        XCTAssertTrue(sut.isCapsLockOn)
-        XCTAssertEqual(sut.report(adding: .capsLock).keys, [.a, .capsLock])
-        XCTAssertEqual(sut.report(adding: .capsLock).modifiers, [.leftShift])
+        XCTAssertEqual(tap.keys, [.a, .capsLock])
+        XCTAssertEqual(tap.modifiers, [.leftShift])
         XCTAssertEqual(sut.report.keys, [.a])
         XCTAssertEqual(sut.report.modifiers, [.leftShift])
     }
 
-    func testCapsLockFoldsShiftOnlyOverHeldLetters() {
+    func testCapsLockTapDoesNotChangeHeldModifiers() {
         var sut = KeyboardInputState()
-        sut.toggleCapsLock()
+        sut.pressModifier(.leftGUI)
+        sut.pressKey(.z)
+        let heldBefore = sut.heldModifiers
 
-        XCTAssertEqual(sut.report.modifiers, [])
+        _ = sut.report(adding: .capsLock)
 
-        sut.pressKey(.a)
-        XCTAssertEqual(sut.report.modifiers, [.leftShift])
+        XCTAssertEqual(sut.heldModifiers, heldBefore)
+        XCTAssertEqual(sut.report.keys, [.z])
+    }
 
-        sut.pressKey(.digit1)
-        XCTAssertEqual(sut.report.modifiers, [.leftShift])
+    func testCapsLockNeverInjectsShiftIntoAShortcut() {
+        var sut = KeyboardInputState()
+        sut.pressModifier(.leftGUI)
+        sut.pressKey(.z)
 
-        sut.releaseKey(.a)
-        XCTAssertEqual(sut.report.modifiers, [])
+        let tap = sut.report(adding: .capsLock)
+        XCTAssertFalse(tap.modifiers.contains(.leftShift))
+
+        // Cmd+Z has to stay Cmd+Z: the host owns Caps Lock, and this report is
+        // the one the host acts on.
+        XCTAssertEqual(sut.report.modifiers, [.leftGUI])
+        XCTAssertEqual(sut.report.keys, [.z])
+        XCTAssertFalse(sut.isShiftActive)
     }
 
     func testReleaseEverythingClearsKeysAndModifiersOnce() {

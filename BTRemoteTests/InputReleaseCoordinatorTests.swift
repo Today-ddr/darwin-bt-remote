@@ -81,7 +81,8 @@ final class InputReleaseCoordinatorTests: XCTestCase {
             isActive: true,
             isConnected: true,
             activeError: nil,
-            batteryLevel: 100
+            batteryLevel: 100,
+            isCapsLockOn: false
         )
     }
 

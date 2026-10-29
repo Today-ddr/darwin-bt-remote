@@ -7,11 +7,11 @@ final class AppOrientationPolicyTests: XCTestCase {
         XCTAssertEqual(AppOrientationPolicy.mask(for: .input), .landscape)
     }
 
-    func testSetupAllowsEveryOrientation() {
-        XCTAssertEqual(AppOrientationPolicy.mask(for: .setup), .all)
+    func testSetupAllowsPortraitOnly() {
+        XCTAssertEqual(AppOrientationPolicy.mask(for: .setup), .portrait)
     }
 
-    func testSettingsAllowsEveryOrientation() {
-        XCTAssertEqual(AppOrientationPolicy.mask(for: .settings), .all)
+    func testSettingsAllowsPortraitOnly() {
+        XCTAssertEqual(AppOrientationPolicy.mask(for: .settings), .portrait)
     }
 }

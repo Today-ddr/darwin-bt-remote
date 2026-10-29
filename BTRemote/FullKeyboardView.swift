@@ -17,9 +17,10 @@ struct FullKeyboardView: View {
     let releases: InputReleaseCoordinator
 
     @Environment(\.hid) private var hid
-    /// Keys, modifier keys and the Caps Lock latch. Both key kinds are reference
-    /// counted, so two fingers on one cap are one logical press and the input is
-    /// released only when the last finger leaves.
+    /// Keys and modifier keys. Both are reference counted, so two fingers on one
+    /// cap are one logical press and the input is released only when the last
+    /// finger leaves. Caps Lock is not here: its state belongs to the host and is
+    /// read back through `hid.isCapsLockOn`.
     @State private var state = KeyboardInputState()
     /// Fingers on the key surface, shared with every per-key touch layer.
     @StateObject private var surfaceTouches = KeyTouchCount()
@@ -279,7 +280,7 @@ struct FullKeyboardView: View {
         case let .modifier(mod):
             state.heldModifiers.contains(mod)
         case .capsLock:
-            state.isCapsLockOn
+            hid.isCapsLockOn
         case .key:
             false
         }
@@ -292,7 +293,7 @@ struct FullKeyboardView: View {
         case let .modifier(mod):
             modifierDown(mod)
         case .capsLock:
-            toggleCapsLock()
+            sendCapsLockTap()
         }
     }
 
@@ -345,11 +346,14 @@ struct FullKeyboardView: View {
         hid.sendKeyboard(state.report)
     }
 
-    /// Caps Lock stays a toggle, but the tap is sent with the current held keys
-    /// folded in and then followed by the held-key report, so a key that was down
-    /// when Caps was tapped is not dropped by the tap's release report.
-    private func toggleCapsLock() {
-        state.toggleCapsLock()
+    /// Caps Lock is the host's state, not a local latch: the tap is the whole
+    /// interaction. The host flips Caps Lock, updates its LED, and the view reads
+    /// that LED back through `hid.isCapsLockOn`. Nothing synthesises Shift here, so
+    /// a Caps Lock that is on can never turn `Cmd+Z` into `Cmd+Shift+Z`. The tap is
+    /// sent with the current held keys folded in and then followed by the held-key
+    /// report, so a key that was down when Caps was tapped is not dropped by the
+    /// tap's release report.
+    private func sendCapsLockTap() {
         hid.sendKeyboard(state.report(adding: .capsLock))
         sendHeldKeys()
     }
