@@ -2738,57 +2738,6 @@
         }
       }
     },
-    "welcome.message": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Learn how to connect over Bluetooth. Open the in-app guide or watch the video walkthrough."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "了解如何通过蓝牙连接。打开应用内指南，或观看视频演示。"
-          }
-        }
-      }
-    },
-    "welcome.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Getting Started"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "快速上手"
-          }
-        }
-      }
-    },
-    "welcome.view_guide": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "View Guide"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "查看指南"
-          }
-        }
-      }
-    },
     "remote.mode": {
       "extractionState": "manual",
       "localizations": {

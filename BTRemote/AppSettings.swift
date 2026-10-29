@@ -11,7 +11,6 @@ enum AppSettings {
     static let deviceNamesKey = "BTRemote.deviceNames"
     /// UUID strings of the hosts the user removed; a removal has to outlive the launch that made it
     static let blockedCentralsKey = "BTRemote.blockedCentrals"
-    static let hasSeenWelcomeKey = "BTRemote.hasSeenWelcome"
     /// Raw value of `InputPage`; the last page shown in the input tab.
     static let inputPageKey = "BTRemote.inputPage"
     static let advertisedNameKey = "BTRemote.advertisedName"

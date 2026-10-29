@@ -5,10 +5,6 @@ struct ContentView: View {
 
     @Environment(\.hid) private var hid
     @Environment(\.appTheme) private var appTheme
-    @Environment(\.openURL) private var openURL
-    @AppStorage(AppSettings.hasSeenWelcomeKey) private var hasSeenWelcome = false
-    @State private var showWelcome = false
-    @State private var showGuide = false
 
     var body: some View {
         rootTabs
@@ -20,20 +16,8 @@ struct ContentView: View {
                 OrientationController.apply(for: newTab)
             }
             .onAppear {
-                _onAppear()
                 OrientationController.apply(for: tab)
             }
-            .alert(L10n.Welcome.title, isPresented: $showWelcome) {
-                Button(L10n.Welcome.viewGuide) {
-                    hasSeenWelcome = true
-                    showGuide = true
-                }
-                .keyboardShortcut(.defaultAction)
-                Button(L10n.Setup.videoInstructions) { openURL(AppSettings.instructionsURL) }
-            } message: {
-                Text(L10n.Welcome.message)
-            }
-            .sheet(isPresented: $showGuide) { guideSheet }
     }
 
     private var tabs: some View {
@@ -71,26 +55,6 @@ struct ContentView: View {
                 .animation(.easeInOut(duration: 0.18), value: showsDock)
                 .background(appTheme.pageBackground.ignoresSafeArea())
         }
-    }
-
-    private func _onAppear() {
-        if !hasSeenWelcome {
-            showWelcome = true
-        }
-    }
-
-    private var guideSheet: some View {
-        NavigationView { guideSheetContent }
-            .navigationViewStyle(.stack)
-    }
-
-    private var guideSheetContent: some View {
-        GuideView()
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(L10n.Action.done) { showGuide = false }
-                }
-            }
     }
 }
 

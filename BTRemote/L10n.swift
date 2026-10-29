@@ -144,20 +144,6 @@ enum L10n {
         }
     }
 
-    enum Welcome {
-        static var title: LocalizedStringKey {
-            "welcome.title"
-        }
-
-        static var message: LocalizedStringKey {
-            "welcome.message"
-        }
-
-        static var viewGuide: LocalizedStringKey {
-            "welcome.view_guide"
-        }
-    }
-
     enum Sort {
         static var title: LocalizedStringKey {
             "sort.title"

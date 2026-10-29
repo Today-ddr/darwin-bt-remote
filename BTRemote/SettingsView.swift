@@ -10,7 +10,6 @@ struct SettingsView: View {
     @AppStorage(AppSettings.scrollSensitivityKey) private var scrollSensitivity = AppSettings.defaultScrollSensitivity
     @AppStorage(AppSettings.developerModeKey) private var developerMode = false
     @AppStorage(AppSettings.useServiceChangedKey) private var forceServiceChanged = true
-    @AppStorage(AppSettings.hasSeenWelcomeKey) private var hasSeenWelcome = false
     @AppStorage(AppSettings.hapticsEnabledKey) private var hapticsEnabled = true
     @AppStorage(AppSettings.hapticsTrackpadKey) private var hapticsTrackpad = true
     @AppStorage(AppSettings.hapticsKeyboardKey) private var hapticsKeyboard = true
@@ -120,7 +119,6 @@ struct SettingsView: View {
         if let bundleID = Bundle.main.bundleIdentifier {
             UserDefaults.standard.removePersistentDomain(forName: bundleID)
         }
-        hasSeenWelcome = false
     }
 
     private var batterySection: some View {
