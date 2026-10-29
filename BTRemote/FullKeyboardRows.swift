@@ -8,9 +8,9 @@ extension FullKeyboardView {
     /// Screen and no standalone forward delete, matching the MacBook Air keyboard
     /// this page models.
     ///
-    /// 1.5 + twelve × 1.083333… = 14.5u.
+    /// 1.5 + twelve × (14.5 − 1.5) / 12 = 14.5u.
     var row0: [FullKeyCap] {
-        let functionKeyWidth = 13.0 / 12.0
+        let functionKeyWidth = (KeyboardGridMetrics.totalUnits - 1.5) / 12.0
         return [
             FullKeyCap(.text("Esc"), weight: 1.5, L10n.Keyboard.esc, .key(.escape)),
             FullKeyCap(.text("F1"), weight: functionKeyWidth, "F1", .key(.f1)),
@@ -119,9 +119,9 @@ extension FullKeyboardView {
     }
 
     /// MacBook bottom row: Control, Option, Command, Space, Command, Option,
-    /// then the four equally wide arrow columns. Left and Right are single caps;
-    /// Up and Down share the column between them as two half-height caps. There is
-    /// no Fn or Globe key on this page, by design.
+    /// then the arrow cluster: three 1u columns carry four arrows. Left and Right
+    /// are single caps; Up and Down share the middle column as two half-height
+    /// caps. There is no Fn or Globe key on this page, by design.
     ///
     /// 1 + 1 + 1.25 + 6 + 1.25 + 1 + 1 + 1 + 1 = 14.5u.
     var row5: [FullKeyCap] {

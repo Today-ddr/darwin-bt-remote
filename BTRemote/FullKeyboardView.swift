@@ -183,11 +183,13 @@ struct FullKeyboardView: View {
         .frame(width: width, height: height, alignment: .topLeading)
     }
 
-    /// One grid cell. A normal cap fills it; the Up/Down cell is split into two
-    /// half-height caps separated by the same gap the rows use. Both halves are
-    /// ordinary cap buttons with their own touch layer, press state, accessibility
-    /// and action, so the two arrows stay independently pressable — a diagonal or
-    /// simultaneous two-finger press cannot pick the wrong one.
+    /// One grid cell. A normal cap fills it. The Up/Down cell is split into two
+    /// equal touch bands that meet exactly at the middle, so the whole cell is
+    /// pressable: each band is half the cell, while the visible caps keep the row
+    /// gap by pulling back from that shared edge. Both halves are ordinary cap
+    /// buttons with their own touch layer, press state, accessibility and action,
+    /// so the two arrows stay independently pressable — a diagonal or simultaneous
+    /// two-finger press cannot pick the wrong one.
     @ViewBuilder
     private func keyCapCell(
         _ placement: KeyPlacement,
@@ -195,21 +197,25 @@ struct FullKeyboardView: View {
         gap: CGFloat,
         isCompact: Bool
     ) -> some View {
-        let halfHeight = (placement.frame.height - gap) / 2
         if let below = placement.key.stackedBelow {
-            VStack(spacing: gap) {
+            let geometry = StackedKeyCellGeometry(cellHeight: placement.frame.height, gap: gap)
+            VStack(spacing: 0) {
                 keyCapButton(
                     placement.key,
                     id: KeyCapID(row: rowIndex, column: placement.column),
-                    isCompact: isCompact
+                    isCompact: isCompact,
+                    capInsets: EdgeInsets(top: 0, leading: 0, bottom: geometry.capInset, trailing: 0),
+                    showsPressBubble: false
                 )
-                .frame(height: halfHeight)
+                .frame(height: geometry.touchHeight)
                 keyCapButton(
                     below,
                     id: KeyCapID(row: rowIndex, column: placement.column, stack: 1),
-                    isCompact: isCompact
+                    isCompact: isCompact,
+                    capInsets: EdgeInsets(top: geometry.capInset, leading: 0, bottom: 0, trailing: 0),
+                    showsPressBubble: false
                 )
-                .frame(height: halfHeight)
+                .frame(height: geometry.touchHeight)
             }
         } else {
             keyCapButton(
@@ -223,7 +229,9 @@ struct FullKeyboardView: View {
     private func keyCapButton(
         _ key: FullKeyCap,
         id: KeyCapID,
-        isCompact: Bool
+        isCompact: Bool,
+        capInsets: EdgeInsets = EdgeInsets(),
+        showsPressBubble: Bool = true
     ) -> some View {
         FullKeyCapButton(
             id: id,
@@ -233,6 +241,8 @@ struct FullKeyboardView: View {
             isArmed: isKeyArmed(key),
             isShiftActive: isShiftActive,
             surfaceTouches: surfaceTouches,
+            capInsets: capInsets,
+            showsPressBubble: showsPressBubble,
             onPress: { handlePress(key.action) },
             onRelease: { handleRelease(key.action) }
         )
@@ -241,7 +251,9 @@ struct FullKeyboardView: View {
     private func keyCapButton(
         _ key: FullKeyCap.Stacked,
         id: KeyCapID,
-        isCompact: Bool
+        isCompact: Bool,
+        capInsets: EdgeInsets = EdgeInsets(),
+        showsPressBubble: Bool = true
     ) -> some View {
         FullKeyCapButton(
             id: id,
@@ -251,6 +263,8 @@ struct FullKeyboardView: View {
             isArmed: false,
             isShiftActive: isShiftActive,
             surfaceTouches: surfaceTouches,
+            capInsets: capInsets,
+            showsPressBubble: showsPressBubble,
             onPress: { handlePress(key.action) },
             onRelease: { handleRelease(key.action) }
         )
@@ -345,7 +359,8 @@ struct FullKeyboardView: View {
 
 /// Where a cap sits in the layout. Stable for as long as the page is up, so several
 /// bubbles on screen at once each keep their own identity. `stack` distinguishes the two
-/// halves of a vertically stacked cell, so each arrow's bubble is its own.
+/// halves of a vertically stacked cell, so the two arrows remain separate elements even
+/// though they share one grid cell.
 private struct KeyCapID: Hashable {
     let row: Int
     let column: Int
@@ -355,7 +370,9 @@ private struct KeyCapID: Hashable {
 /// A cap that is down right now: what its bubble has to draw, and where the cap is.
 ///
 /// The cap publishes one of these while it is pressed and nothing while it is up, so
-/// with nothing held the collection below is empty and there is nothing to draw.
+/// with nothing held the collection below is empty and there is nothing to draw. The
+/// stacked half-height caps never publish one: their bubble would be taller than the
+/// half and cover the sibling cap, so they show the press with opacity alone.
 private struct KeyPressBubble: Identifiable {
     let id: KeyCapID
     let label: FullKeyCap.Label
@@ -444,6 +461,14 @@ private struct FullKeyCapButton: View {
     let isArmed: Bool
     let isShiftActive: Bool
     let surfaceTouches: KeyTouchCount
+    /// Insets on the drawn cap inside its touch band. Ordinary caps fill the band;
+    /// the stacked arrows use this to pull their visible cap back from the shared
+    /// middle edge, which draws the row gap without leaving it untouchable.
+    var capInsets = EdgeInsets()
+    /// Half-height caps do not float a press bubble: the bubble is taller than the
+    /// cap and would cover the other half of the cell. They keep the opacity
+    /// feedback instead, and ordinary full-height caps are unaffected.
+    var showsPressBubble = true
     let onPress: () -> Void
     let onRelease: () -> Void
 
@@ -460,19 +485,21 @@ private struct FullKeyCapButton: View {
                 onFirstTouch: press,
                 onLastTouch: release
             )
-            RoundedRectangle(cornerRadius: 6)
-                .fill(isArmed ? Color.accentColor : appTheme.controlFill)
-                .allowsHitTesting(false)
-            KeyCapLabel(label: label, isCompact: isCompact, isArmed: isArmed, isShiftActive: isShiftActive)
-                .foregroundColor(isArmed ? .white : .primary)
-                .allowsHitTesting(false)
+            ZStack {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isArmed ? Color.accentColor : appTheme.controlFill)
+                KeyCapLabel(label: label, isCompact: isCompact, isArmed: isArmed, isShiftActive: isShiftActive)
+                    .foregroundColor(isArmed ? .white : .primary)
+            }
+            .padding(capInsets)
+            .allowsHitTesting(false)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .opacity(isPressed ? 0.6 : 1)
         // Only the cap that is down publishes its frame, so an idle keyboard sends the
         // overlay an empty list and nothing is drawn.
         .anchorPreference(key: KeyPressBubblePreference.self, value: .bounds) { anchor in
-            guard isPressed else { return [] }
+            guard isPressed, showsPressBubble else { return [] }
             return [
                 KeyPressBubble(
                     id: id,

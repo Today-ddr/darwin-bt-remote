@@ -4,8 +4,9 @@ import XCTest
 
 @MainActor
 final class FullKeyboardRowsTests: XCTestCase {
-    private let totalUnits: CGFloat = 14.5
-    private let functionKeyWidth: CGFloat = 13.0 / 12.0
+    private let totalUnits = KeyboardGridMetrics.totalUnits
+    private let functionKeyWidth = (KeyboardGridMetrics.totalUnits - 1.5) / 12
+    private let allArrowCodes: Set<Keycode> = [.leftArrow, .upArrow, .downArrow, .rightArrow]
 
     func testEveryRowUsesFourteenPointFiveUnits() {
         let sut = makeSUT()
@@ -108,9 +109,13 @@ final class FullKeyboardRowsTests: XCTestCase {
         XCTAssertEqual(firstModifier, .leftCtrl)
 
         for key in sut.row5 {
-            let text = labelText(key.label).lowercased()
-            XCTAssertFalse(text.contains("fn"), "unexpected Fn key: \(text)")
-            XCTAssertFalse(text.contains("globe"), "unexpected Globe key: \(text)")
+            assertNoFnOrGlobe(key.label, "row5 cap")
+            guard let below = key.stackedBelow else { continue }
+            assertNoFnOrGlobe(below.label, "row5 stackedBelow cap")
+            guard case let .key(code) = below.action else {
+                return XCTFail("the stacked half must be a key, not a modifier")
+            }
+            XCTAssertEqual(code, .downArrow, "only Down may be hidden in a stacked cell")
         }
         XCTAssertEqual(modifiers(in: sut.row5).count, 5)
     }
@@ -122,7 +127,7 @@ final class FullKeyboardRowsTests: XCTestCase {
         XCTAssertEqual(sut.row4.count, 12)
     }
 
-    func testArrowClusterUsesFourEqualWidthColumns() throws {
+    func testArrowClusterUsesThreeEqualWidthColumnsForFourArrows() throws {
         let sut = makeSUT()
         let left = try XCTUnwrap(index(of: .leftArrow, in: sut.row5))
         let right = try XCTUnwrap(index(of: .rightArrow, in: sut.row5))
@@ -131,6 +136,8 @@ final class FullKeyboardRowsTests: XCTestCase {
         XCTAssertEqual(sut.row5[left].weight, 1.0, accuracy: 0.001)
         XCTAssertEqual(sut.row5[left + 1].weight, 1.0, accuracy: 0.001)
         XCTAssertEqual(sut.row5[right].weight, 1.0, accuracy: 0.001)
+        XCTAssertNotNil(sut.row5[left + 1].stackedBelow, "the middle column must carry both Up and Down")
+        XCTAssertEqual(arrowKeycodes(in: sut.row5), [.leftArrow, .upArrow, .downArrow, .rightArrow])
     }
 
     func testUpAndDownShareOneStackedCellWithIndependentActions() throws {
@@ -173,6 +180,30 @@ final class FullKeyboardRowsTests: XCTestCase {
             guard case let .modifier(mod) = key.action else { return nil }
             return mod
         }
+    }
+
+    /// Every arrow the row answers, including one stacked inside another cell, in
+    /// grid order. Four arrows sit in three columns: Left, Up/Down, Right.
+    private func arrowKeycodes(in row: [FullKeyCap]) -> [Keycode] {
+        row.flatMap { key -> [Keycode] in
+            var codes: [Keycode] = []
+            if case let .key(code) = key.action, allArrowCodes.contains(code) {
+                codes.append(code)
+            }
+            if let below = key.stackedBelow,
+               case let .key(code) = below.action,
+               allArrowCodes.contains(code)
+            {
+                codes.append(code)
+            }
+            return codes
+        }
+    }
+
+    private func assertNoFnOrGlobe(_ label: FullKeyCap.Label, _ context: String) {
+        let text = labelText(label).lowercased()
+        XCTAssertFalse(text.contains("fn"), "unexpected Fn key on \(context): \(text)")
+        XCTAssertFalse(text.contains("globe"), "unexpected Globe key on \(context): \(text)")
     }
 
     private func labelText(_ label: FullKeyCap.Label) -> String {
