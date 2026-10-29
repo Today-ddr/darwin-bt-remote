@@ -11,9 +11,17 @@ import SwiftUI
 /// main key-up (or the other way round), so one of the two hosts never saw its release.
 /// The characteristic's object identity is what actually separates the two destinations;
 /// the report ID is kept so diagnostics can name the kind of report.
+///
+/// The target is part of the identity as well. A switch of control sends the old host a
+/// release and then the new host one on the same characteristic and report ID; without the
+/// target the two zero reports shared one slot, so the old host's release was overwritten
+/// by the new host's and then filtered out as belonging to neither — the old host kept the
+/// key down. With the target in the key each host owns its own slot and both can wait for
+/// their queue at the same time.
 struct HIDPendingBroadcastKey: Hashable {
     let reportID: UInt8
     let characteristic: ObjectIdentifier
+    let target: UUID
 }
 
 /// HID-over-GATT peripheral engine
@@ -121,20 +129,26 @@ final class HIDPeripheral: NSObject, ObservableObject {
         ]
     }
 
-    /// One parked payload per (report ID, characteristic instance). A single slot per ID let
-    /// any later report evict a parked one, and keying by ID alone still made the main and
-    /// boot keyboard reports overwrite each other — a key-up waiting on the send queue could
-    /// be silently replaced and never reach the host, which then repeated the key forever
-    /// because it still believed the key was held.
+    /// One parked payload per (report ID, characteristic instance, target host). A single
+    /// slot per ID let any later report evict a parked one, and keying by ID alone still
+    /// made the main and boot keyboard reports overwrite each other — a key-up waiting on
+    /// the send queue could be silently replaced and never reach the host, which then
+    /// repeated the key forever because it still believed the key was held.
     ///
     /// Each entry also remembers the host it was addressed to. Only one host receives input
     /// at a time, so anything still queued at a switch belongs to the host that just lost
-    /// control and is dropped rather than replayed on the new one; the report of the new
-    /// active host that could not be sent is parked on its own turn.
+    /// control; ordinary input is dropped rather than replayed on the new host. A release is
+    /// the exception: it is the report that clears what that old host may still be holding,
+    /// so it stays addressable while the old host is subscribed (see
+    /// `_dropParkedBroadcastsFromPreviousHost` and `drainPendingBroadcasts`).
     private struct PendingBroadcast {
         let data: Data
         let char: CBMutableCharacteristic
         let target: UUID
+        /// Whether this is a zero report written to release held input. Releases are
+        /// routed differently from input: they may reach a host that no longer holds
+        /// control, and a mute or removal must not stop them from clearing a stuck key.
+        let isRelease: Bool
         let sequence: UInt64
     }
 
@@ -375,15 +389,40 @@ final class HIDPeripheral: NSObject, ObservableObject {
     }
 
     func sendMouse(_ report: MouseReport) {
-        broadcast(report.data, reportID: .mouse)
+        _sendMouse(report, isRelease: false)
     }
 
     func sendDigitizer(_ report: DigitizerReport) {
-        broadcast(report.data, reportID: .digitizer)
+        _sendDigitizer(report, isRelease: false)
     }
 
     func sendKeyboard(_ report: KeyboardReport) {
-        broadcast(report.data, reportID: .keyboard)
+        _sendKeyboard(report, isRelease: false)
+    }
+
+    func sendConsumer(_ report: ConsumerReport) {
+        broadcast(report.data, reportID: .consumerControl, isRelease: false)
+    }
+
+    func sendSystemControl(_ report: SystemControlReport) {
+        broadcast(report.data, reportID: .systemControl, isRelease: false)
+    }
+
+    /// The one place a mouse report is written, with whether it is a release travelling
+    /// alongside it. The public entry points above always send input; `_releaseHeldInput`
+    /// is the only caller that marks a report as a release.
+    private func _sendMouse(_ report: MouseReport, isRelease: Bool) {
+        broadcast(report.data, reportID: .mouse, isRelease: isRelease)
+    }
+
+    private func _sendDigitizer(_ report: DigitizerReport, isRelease: Bool) {
+        broadcast(report.data, reportID: .digitizer, isRelease: isRelease)
+    }
+
+    /// The same split for the keyboard: the main report and the boot report carry the same
+    /// release flag, so both protocol variants can clear a key that is still down.
+    private func _sendKeyboard(_ report: KeyboardReport, isRelease: Bool) {
+        broadcast(report.data, reportID: .keyboard, isRelease: isRelease)
         // Boot-protocol hosts read this characteristic instead. Only the host that actually
         // subscribed to it gets a copy: a host in report protocol never subscribes here, so
         // writing unconditionally would either be dropped or — worse — park a duplicate
@@ -391,15 +430,12 @@ final class HIDPeripheral: NSObject, ObservableObject {
         guard let bootChar = bootKeyboardInputChar,
               !activeRecipients(for: bootChar).isEmpty
         else { return }
-        _ = updateValue(report.data, for: bootChar, reportID: ReportID.keyboard.rawValue)
-    }
-
-    func sendConsumer(_ report: ConsumerReport) {
-        broadcast(report.data, reportID: .consumerControl)
-    }
-
-    func sendSystemControl(_ report: SystemControlReport) {
-        broadcast(report.data, reportID: .systemControl)
+        _ = updateValue(
+            report.data,
+            for: bootChar,
+            reportID: ReportID.keyboard.rawValue,
+            isRelease: isRelease
+        )
     }
 
     /// Mute or unmute a host. Muting is a filter on top of control, never a way to hand it
@@ -450,6 +486,10 @@ final class HIDPeripheral: NSObject, ObservableObject {
         inactiveCentrals.remove(uuid)
         if wasActive {
             _dropParkedBroadcastsFromPreviousHost()
+            // a release parked for the host that was just removed is still deliverable:
+            // the link is alive and the report only clears state. Control being nil is not
+            // a reason to leave it waiting for a queue callback that may never come.
+            _drainIfUnblocked()
         }
         objectWillChange.send()
     }
@@ -539,10 +579,14 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// mouse buttons (and any unfinished motion), and the digitizer's contacts. One zeroed
     /// report per characteristic is what tells the host nothing is down any more; a report
     /// type nobody is subscribed to quietly does nothing.
+    ///
+    /// Everything written here is marked as a release. That is what lets it survive a switch
+    /// of control: the previous host's release is still delivered after the new host has
+    /// taken over, even though ordinary input for the old host is dropped.
     private func _releaseHeldInput() {
-        sendKeyboard(.zero)
-        sendMouse(.zero)
-        sendDigitizer(.zero)
+        _sendKeyboard(.zero, isRelease: true)
+        _sendMouse(.zero, isRelease: true)
+        _sendDigitizer(.zero, isRelease: true)
     }
 
     /// Gives control to a subscribed, unblocked and unmuted host after the one that held it
@@ -599,8 +643,12 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// per change of state, and the attempt itself is the same one congestion already uses.
     /// A send that is refused again because the queue is full re-parks the report and defers
     /// to `peripheralManagerIsReady`, exactly as before.
+    ///
+    /// `hasControl` is not a precondition here: a parked release still has a destination
+    /// when no host holds control — that is exactly the `removeCentral` case — and the drain
+    /// applies the control gate to ordinary input alone.
     private func _drainIfUnblocked() {
-        guard hasParkedBroadcasts, hasControl else { return }
+        guard hasParkedBroadcasts else { return }
         isReadyToSendNotification = true
         drainPendingBroadcasts()
     }
@@ -871,10 +919,10 @@ final class HIDPeripheral: NSObject, ObservableObject {
         ])
     }
 
-    private func broadcast(_ data: Data, reportID: ReportID) {
+    private func broadcast(_ data: Data, reportID: ReportID, isRelease: Bool) {
         cachedReports[reportID.rawValue] = data
         guard let char = charsByReportID[reportID.rawValue] else { return }
-        _ = updateValue(data, for: char, reportID: reportID.rawValue)
+        _ = updateValue(data, for: char, reportID: reportID.rawValue, isRelease: isRelease)
     }
 
     /// Sends one report on one characteristic.
@@ -885,12 +933,17 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// being dropped. The recipients are the active host filtered by whether *this*
     /// characteristic instance is in its subscription set — every report characteristic
     /// shares UUID 0x2A4D, so a UUID check cannot make that distinction.
+    ///
+    /// `isRelease` marks the zero report `_releaseHeldInput` writes. It is carried into the
+    /// parked entry so a release survives a switch of control and is routed by its own
+    /// target rather than by whoever is active when the queue recovers.
     @discardableResult
     private func updateValue(
         _ data: Data,
         for char: CBMutableCharacteristic,
-        reportID: UInt8? = nil,
-        reportsDrop: Bool = true
+        reportID: UInt8,
+        reportsDrop: Bool = true,
+        isRelease: Bool = false
     ) -> Bool {
         guard let pManager else { return false }
         guard let target = activeCentral, hasControl else {
@@ -906,7 +959,7 @@ final class HIDPeripheral: NSObject, ObservableObject {
             return false
         }
         if !isReadyToSendNotification {
-            park(data, for: char, reportID: reportID, target: target)
+            park(data, for: char, reportID: reportID, target: target, isRelease: isRelease)
             return false
         }
         let accepted = pManager.updateValue(data, for: char, onSubscribedCentrals: recipients)
@@ -919,43 +972,61 @@ final class HIDPeripheral: NSObject, ObservableObject {
             _clearDroppedInputNoticeIfHeld()
         } else {
             // the queue is full: keep this report, replacing only an older one of its own
-            // (report ID, characteristic) pair
+            // (report ID, characteristic, target) triple
             isReadyToSendNotification = false
-            park(data, for: char, reportID: reportID, target: target)
+            park(data, for: char, reportID: reportID, target: target, isRelease: isRelease)
         }
         return accepted
     }
 
-    /// Parks a report that could not be sent, keyed by the characteristic instance and the
-    /// report ID. Two characteristics that share UUID 0x2A4D — the main and boot keyboard
-    /// reports, for instance — therefore own independent slots and can never overwrite each
-    /// other's key-up. The target is the host the report was written for, which is whoever
-    /// was receiving input when it was parked: input that had no host to go to was dropped
-    /// where it was written, not parked, so a parked report is never re-routed to a host
-    /// that turns up later (see `updateValue` and `_reportDroppedInputIfNone`).
-    private func park(_ data: Data, for char: CBMutableCharacteristic, reportID id: UInt8?, target: UUID) {
+    /// Parks a report that could not be sent, keyed by the characteristic instance, the
+    /// report ID and the target host. Two characteristics that share UUID 0x2A4D — the main
+    /// and boot keyboard reports, for instance — therefore own independent slots and can
+    /// never overwrite each other's key-up. The target in the key is what lets the old host's
+    /// release and the new host's release coexist during a switch: both are zero reports on
+    /// the same characteristic, and only the host they are addressed to tells them apart.
+    ///
+    /// A parked report is never re-routed to a host that turns up later: input that had no
+    /// host to go to was dropped where it was written, not parked (see `updateValue` and
+    /// `_reportDroppedInputIfNone`).
+    private func park(
+        _ data: Data,
+        for char: CBMutableCharacteristic,
+        reportID: UInt8,
+        target: UUID,
+        isRelease: Bool
+    ) {
         parkSequence += 1
         let key = HIDPendingBroadcastKey(
-            reportID: id ?? 0xF0,
-            characteristic: ObjectIdentifier(char)
+            reportID: reportID,
+            characteristic: ObjectIdentifier(char),
+            target: target
         )
         pendingBroadcasts[key] = PendingBroadcast(
             data: data,
             char: char,
             target: target,
+            isRelease: isRelease,
             sequence: parkSequence
         )
     }
 
     /// Re-sends every parked report, oldest first. A report that fails again simply stays
-    /// parked, and each (report ID, characteristic) pair is drained independently, so no
-    /// report type or characteristic can evict another.
+    /// parked, and each (report ID, characteristic, target) triple is drained independently,
+    /// so no report type, characteristic or host can evict another.
     ///
     /// Congestion is what this drain remains for: a report that is refused again here leaves
     /// the flag false, so `peripheralManagerIsReady` is what brings the next attempt. Being
     /// called again sooner than that is fine — a mute that has been lifted is one of the
     /// things that brings it, so a key-up that was parked before the mute is not stranded
     /// until a new report happens to be written (see `_drainIfUnblocked`).
+    ///
+    /// Ordinary input goes only to the active host. A release goes to the host named by its
+    /// own entry, which may have lost control since it was parked; it is allowed to reach a
+    /// host that is now muted or removed, because the zero report only clears state and a
+    /// host left believing a key is down is the worse outcome. What still drops a release is
+    /// the link itself: no live central object or no subscription to that characteristic
+    /// means there is nowhere to write it.
     private func drainPendingBroadcasts() {
         guard hasParkedBroadcasts, let pManager else { return }
         let ordered = pendingBroadcasts
@@ -964,22 +1035,35 @@ final class HIDPeripheral: NSObject, ObservableObject {
         for (key, entry) in ordered {
             // the snapshot can name an entry that has since been replaced or removed
             guard pendingBroadcasts[key] != nil else { continue }
-            // a report left over from a previous host is dropped: the host it was written
-            // for no longer receives input. Congestion is left to report itself below, so
-            // nothing is discarded while the active host is merely muted or away.
-            guard entry.target == activeCentral else {
-                pendingBroadcasts.removeValue(forKey: key)
-                continue
-            }
-            // no recipient is why it was parked, not something to spin on: leave it parked
-            // and let the change that makes a recipient available retry it
-            guard hasControl else { return }
-            let recipients = activeRecipients(for: entry.char)
-            guard !recipients.isEmpty else {
-                // the active host no longer subscribes to this characteristic, so this entry
-                // can never reach it; drop it instead of keeping it forever
-                pendingBroadcasts.removeValue(forKey: key)
-                continue
+            let recipients: [CBCentral]
+            if entry.isRelease {
+                guard let central = centralObjects[entry.target],
+                      subscribedCentrals[entry.target]?.contains(key.characteristic) == true
+                else {
+                    pendingBroadcasts.removeValue(forKey: key)
+                    continue
+                }
+                recipients = [central]
+            } else {
+                // a report left over from a previous host is dropped: the host it was written
+                // for no longer receives input
+                guard entry.target == activeCentral else {
+                    pendingBroadcasts.removeValue(forKey: key)
+                    continue
+                }
+                // no recipient is why it was parked, not something to spin on: leave it parked
+                // and let the change that makes a recipient available retry it. This gate is
+                // for ordinary input only — returning here for a release would leave the old
+                // host's key-up stranded once `removeCentral` has cleared `activeCentral`.
+                guard hasControl else { continue }
+                let active = activeRecipients(for: entry.char)
+                guard !active.isEmpty else {
+                    // the active host no longer subscribes to this characteristic, so this
+                    // entry can never reach it; drop it instead of keeping it forever
+                    pendingBroadcasts.removeValue(forKey: key)
+                    continue
+                }
+                recipients = active
             }
             guard pManager.updateValue(entry.data, for: entry.char, onSubscribedCentrals: recipients) else {
                 // the queue is full: the flag goes false so the next attempt comes from
@@ -1023,15 +1107,27 @@ final class HIDPeripheral: NSObject, ObservableObject {
         lastError = nil
     }
 
-    /// Retracts a report that was parked for the host that just lost control, the way a
-    /// switch discards it during a drain: the next host should not receive input the old one
-    /// was meant to get. The key snapshot is taken first because removing from a dictionary
-    /// while iterating it is not supported.
+    /// Retracts reports parked for the host that just lost control. Ordinary input is
+    /// discarded: the next host should not receive what the old one was meant to get. A
+    /// release is different — it is the zero report that clears what the old host may still
+    /// be holding, so it stays parked while that host is linked and subscribed to the
+    /// characteristic it was written for. Muting or removing the host does not filter it
+    /// out: the user's input filters decide who receives new input, not whether an already
+    /// held key may be cleared. The key snapshot is taken first because removing from a
+    /// dictionary while iterating it is not supported.
     private func _dropParkedBroadcastsFromPreviousHost() {
         for key in Array(pendingBroadcasts.keys) {
-            if pendingBroadcasts[key]?.target != activeCentral {
-                pendingBroadcasts.removeValue(forKey: key)
+            guard let entry = pendingBroadcasts[key] else { continue }
+            if entry.target == activeCentral {
+                continue
             }
+            if entry.isRelease,
+               centralObjects[entry.target] != nil,
+               subscribedCentrals[entry.target]?.contains(key.characteristic) == true
+            {
+                continue
+            }
+            pendingBroadcasts.removeValue(forKey: key)
         }
     }
 
