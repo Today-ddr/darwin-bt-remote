@@ -96,6 +96,11 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// Whether the user wants to be discoverable. `stop()` clears only this; a late
     /// `didAdd`/`didStartAdvertising` callback must not advertise after it has gone false.
     private var isAdvertisingRequested = false
+    /// A start request that has been handed to CoreBluetooth but whose callback has not
+    /// arrived yet. Without it a second `startAdvertisingNow` — the state callback and the
+    /// install chain can both reach it — would ask the manager to start twice; the duplicate
+    /// request either fails or makes the two callbacks race over `isAdvertising`.
+    private var isAdvertisingPending = false
     private var isReadyToSendNotification = true
     /// The two intents as they were when `suspend` took the peripheral apart, so `resume`
     /// restores exactly what was running rather than the maximum.
@@ -209,6 +214,10 @@ final class HIDPeripheral: NSObject, ObservableObject {
         isAdvertisingRequested = false
         pManager?.stopAdvertising()
         isAdvertising = false
+        // a start still in flight is no longer wanted; its callback is ignored because the
+        // request is false, and the flag is cleared here so a later Start is not refused by
+        // a pending bit that will never be retired by the ignored callback
+        isAdvertisingPending = false
     }
 
     /// Whether the peripheral is on the air in any sense: advertising, holding services a
@@ -347,6 +356,9 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// and is kept.
     private func _clearLinkState() {
         isHIDServiceAdded = false
+        // the manager the request belonged to is gone (or the radio went away), so that
+        // callback either never comes or is dropped by the identity check above
+        isAdvertisingPending = false
         isReadyToSendNotification = true
         pendingBroadcasts.removeAll()
         batteryServiceObj = nil
@@ -528,15 +540,20 @@ final class HIDPeripheral: NSObject, ObservableObject {
     /// the advertised name is cached in a stored property, so deleting the defaults domain
     /// alone would leave both alive until the next launch.
     ///
-    /// If advertising is live, stop/start is what makes the restored name visible: the
+    /// If advertising was requested, stop/start is what makes the restored name visible: the
     /// advertisement payload is a snapshot taken when advertising starts, and there is no
-    /// way to update it in place.
+    /// way to update it in place. The test is the request rather than `isAdvertising` because
+    /// the start may still be in flight: a callback that lands after the reset must advertise
+    /// the restored name, not the old one.
     func resetUserState() {
         blockedCentrals.removeAll()
         _saveBlockedCentrals()
         advertiseLocalName = L10n.Bluetooth.advertisedName
         lastError = nil
-        if isAdvertising {
+        // the cached message is also the identity used to clear a stale error on success;
+        // leaving it set would make a later success keep pointing at the reset-away failure
+        lastAdvertisingError = nil
+        if isAdvertisingRequested {
             stop()
             start()
         }
@@ -905,13 +922,17 @@ final class HIDPeripheral: NSObject, ObservableObject {
     private func startAdvertisingNow() {
         // the request, not the callback, is the authority: a Stop tapped while the install
         // chain was still running clears it, and a late `didAdd` must not put the radio back
-        // on the air behind the user's back
+        // on the air behind the user's back. `isAdvertisingPending` is the same idea for a
+        // request that is already in flight: the powered-on callback and the end of the
+        // install chain can both arrive and must not start advertising twice.
         guard isAdvertisingRequested,
               let pManager,
               isHIDServiceAdded,
               state == .poweredOn,
-              !isAdvertising
+              !isAdvertising,
+              !isAdvertisingPending
         else { return }
+        isAdvertisingPending = true
         pManager.startAdvertising([
             CBAdvertisementDataLocalNameKey: advertiseLocalName,
             // hidService must stay first if more than one service is being advertised
@@ -1191,6 +1212,34 @@ final class HIDPeripheral: NSObject, ObservableObject {
         return [central]
     }
 
+    /// Abandons a partially installed service chain after CoreBluetooth rejected a service.
+    ///
+    /// `CBPeripheralManager` keeps the services that were already added, so a failure in the
+    /// middle of the chain would leave the peripheral half-installed — a battery service
+    /// without the HID service, or a HID service without its report map — and nothing would
+    /// ever finish the install. Removing every service and clearing the objects that named
+    /// them returns the engine to the state before `installServices`; the next user Start
+    /// runs the chain again from the first service.
+    ///
+    /// No retry is started here. A rejection that does not go away would turn an automatic
+    /// retry into a loop, so the failure is surfaced through `lastError` and the install stays
+    /// down until the user asks again (or a radio event leads back through `installServices`).
+    private func _abandonFailedInstall(_ error: Error) {
+        pManager?.stopAdvertising()
+        pManager?.removeAllServices()
+        isAdvertising = false
+        isAdvertisingPending = false
+        isHIDServiceAdded = false
+        batteryServiceObj = nil
+        serviceChangedObj = nil
+        serviceChangedArmed = false
+        batteryLevelChar = nil
+        bootMouseInputChar = nil
+        bootKeyboardInputChar = nil
+        charsByReportID.removeAll()
+        lastError = error.localizedDescription
+    }
+
     /// The report ID of a characteristic we installed. Identity only: a peripheral manager
     /// has no restore identifier, so there is no such thing as a restored characteristic
     /// here, and a UUID lookup would confuse the report characteristics that share 0x2A4D.
@@ -1213,8 +1262,16 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
             _clearLinkState()
             return
         }
-        if isHIDServiceAllowed, !isHIDServiceAdded {
-            installServices()
+        // The radio is back: restart whatever the two intents say should exist. The service
+        // side is closed here rather than left for the next `start` — a manager that already
+        // holds its services only has to advertise, and one that does not has to install
+        // them, including after an install failure cleared a half-built chain.
+        if isHIDServiceAllowed {
+            if isHIDServiceAdded {
+                startAdvertisingNow()
+            } else {
+                installServices()
+            }
         }
     }
 
@@ -1224,8 +1281,22 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
         // the `start` after the teardown lays it again from the first service.
         guard peripheral === pManager else { return }
         if let error {
+            // A failure must not fall through to the switch below: the service was not added,
+            // so treating it as a completed step would mark a HID service that does not exist
+            // as added and try to advertise it. The whole partial chain goes instead.
             log.error("didAddService(\(service.uuid)) error: \(error.localizedDescription, privacy: .public)")
-            lastError = error.localizedDescription
+            switch service.uuid {
+            case HIDProfile.batteryService, HIDProfile.deviceInformationService, HIDProfile.hidService:
+                _abandonFailedInstall(error)
+            default:
+                // The service-changed trigger is added outside the install chain, after a
+                // host has already read something. A failure there must not take down a HID
+                // service that is working and linked: surface it and forget the trigger so a
+                // later arming can try again.
+                lastError = error.localizedDescription
+                serviceChangedObj = nil
+            }
+            return
         }
         switch service.uuid {
         case HIDProfile.batteryService:
@@ -1245,6 +1316,9 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
 
     func peripheralManagerDidStartAdvertising(_ peripheral: CBPeripheralManager, error: Error?) {
         guard peripheral === pManager else { return }
+        // the request this callback answers is finished either way; keeping the flag set
+        // would make every later start look like a duplicate and never advertise again
+        isAdvertisingPending = false
         // the user may have tapped Stop while the request was in flight; the callback must
         // not switch advertising back on behind their back
         guard isAdvertisingRequested else {
