@@ -52,7 +52,11 @@ extension HIDInput {
             sendKeyboard: { lowEnergy.sendKeyboard($0) },
             updateBattery: { lowEnergy.updateBatteryLevel($0) },
             isActive: lowEnergy.isHIDServiceAdded,
-            isConnected: lowEnergy.connectedCentrals.contains { !lowEnergy.inactiveCentrals.contains($0) },
+            // a removed host stays linked but holds no control, so it does not count as a
+            // connection here either — otherwise a cold launch could open Input for it
+            isConnected: lowEnergy.connectedCentrals.contains {
+                !lowEnergy.inactiveCentrals.contains($0) && !lowEnergy.isBlocked($0)
+            },
             activeError: lowEnergy.lastError,
             batteryLevel: lowEnergy.batteryLevel,
             isCapsLockOn: lowEnergy.keyboardLEDs.contains(.capsLock)

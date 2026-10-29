@@ -1323,6 +1323,9 @@ extension HIDPeripheral: @preconcurrency CBPeripheralManagerDelegate {
             peripheral.add(hid)
         case HIDProfile.hidService:
             isHIDServiceAdded = true
+            // the chain is complete, so an add error left by an earlier failed install is
+            // stale: Setup must not keep showing it now that the services are back up
+            lastError = nil
             // `startAdvertisingNow` checks the intent, so a Stop during the install chain
             // is not undone by this late callback
             startAdvertisingNow()
