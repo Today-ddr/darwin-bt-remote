@@ -1,9 +1,17 @@
+import CoreBluetooth
 import SwiftUI
 
 struct DeviceEntry: Identifiable, Equatable {
     let id: UUID
     let name: String
     let isNamed: Bool
+    /// scan fields (central role). A host entry leaves them at these neutral values, so the
+    /// host list keeps describing only its own relationship to input.
+    let rssi: Int
+    let advertisedServices: [CBUUID]?
+    /// linked as a central: the app is the client of this peripheral
+    let isCentralConnected: Bool
+    let isConnecting: Bool
     let isSubscribed: Bool
     /// holds control: the one host that receives input
     let isActive: Bool
@@ -11,6 +19,37 @@ struct DeviceEntry: Identifiable, Equatable {
     let isMuted: Bool
     /// removed by the user; stays linked, but needs a restore before it can be used again
     let isRemoved: Bool
+    /// whether the name shown in the info sheet can be edited. A scanned peripheral is listed
+    /// by the name it advertises, which the app cannot change, so its name is read-only.
+    let allowsNameEditing: Bool
+
+    init(
+        id: UUID,
+        name: String,
+        isNamed: Bool,
+        rssi: Int = 0,
+        advertisedServices: [CBUUID]? = nil,
+        isCentralConnected: Bool = false,
+        isConnecting: Bool = false,
+        isSubscribed: Bool,
+        isActive: Bool,
+        isMuted: Bool,
+        isRemoved: Bool,
+        allowsNameEditing: Bool = true
+    ) {
+        self.id = id
+        self.name = name
+        self.isNamed = isNamed
+        self.rssi = rssi
+        self.advertisedServices = advertisedServices
+        self.isCentralConnected = isCentralConnected
+        self.isConnecting = isConnecting
+        self.isSubscribed = isSubscribed
+        self.isActive = isActive
+        self.isMuted = isMuted
+        self.isRemoved = isRemoved
+        self.allowsNameEditing = allowsNameEditing
+    }
 
     var displayName: String {
         if isNamed {
@@ -21,7 +60,7 @@ struct DeviceEntry: Identifiable, Equatable {
 }
 
 struct RowLeadingStatus: View {
-    enum Phase { case idle, active }
+    enum Phase { case idle, connecting, active }
     let phase: Phase
 
     var body: some View {
@@ -29,6 +68,8 @@ struct RowLeadingStatus: View {
             switch phase {
             case .idle:
                 Color.clear
+            case .connecting:
+                ProgressView()
             case .active:
                 Image(systemName: "checkmark")
                     .font(.body.weight(.semibold))
@@ -36,6 +77,44 @@ struct RowLeadingStatus: View {
             }
         }
         .frame(width: 22)
+    }
+}
+
+/// scan-list device line (central role): name, identifier and signal, with the link toggle
+/// behind the row itself and the info button beside it
+struct DeviceRow<Trailing: View>: View {
+    let entry: DeviceEntry
+    var accessibilityLabel: String?
+    let action: () -> Void
+    let onInfo: () -> Void
+    @ViewBuilder let trailing: () -> Trailing
+
+    var body: some View {
+        HStack {
+            Button(action: action) {
+                HStack {
+                    RowLeadingStatus(
+                        phase: entry.isConnecting ? .connecting : (entry.isCentralConnected ? .active : .idle)
+                    )
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(verbatim: entry.displayName).foregroundColor(.primary)
+                        Text(verbatim: entry.id.uuidString)
+                            .font(.caption2).foregroundColor(.secondary).lineLimit(1)
+                    }
+                    Spacer()
+                    trailing()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel(Text(verbatim: accessibilityLabel ?? entry.displayName))
+
+            Button(action: onInfo) {
+                Image(systemName: "info.circle").foregroundColor(.accentColor)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel(L10n.DeviceInfo.info)
+        }
     }
 }
 

@@ -1,5 +1,22 @@
+import CoreBluetooth
 import Foundation
 import SwiftUI
+
+extension CBManagerState {
+    /// Shared by the Setup status row and the device list's scan footer, which both have to
+    /// name a radio that cannot be used.
+    var localizedLabel: LocalizedStringKey {
+        switch self {
+        case .unknown: return L10n.BluetoothState.unknown
+        case .resetting: return L10n.BluetoothState.resetting
+        case .unsupported: return L10n.BluetoothState.unsupported
+        case .unauthorized: return L10n.BluetoothState.unauthorized
+        case .poweredOff: return L10n.BluetoothState.poweredOff
+        case .poweredOn: return L10n.BluetoothState.poweredOn
+        @unknown default: return L10n.BluetoothState.unavailable
+        }
+    }
+}
 
 extension L10n {
     enum DeviceInfo {

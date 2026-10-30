@@ -13,11 +13,7 @@ struct DeviceInfoView: View {
     private var content: some View {
         Form {
             Section(header: Text(L10n.DeviceInfo.device)) {
-                NavigationLink {
-                    NameEditView(title: L10n.DeviceInfo.name, name: _deviceNameBinding)
-                } label: {
-                    infoRow(L10n.DeviceInfo.name, Text(verbatim: entry.displayName))
-                }
+                nameRow
                 identifierRow(Text(verbatim: entry.id.uuidString))
             }
         }
@@ -27,6 +23,20 @@ struct DeviceInfoView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button(L10n.DeviceInfo.done) { dismiss() }
             }
+        }
+    }
+
+    @ViewBuilder private var nameRow: some View {
+        if entry.allowsNameEditing {
+            NavigationLink {
+                NameEditView(title: L10n.DeviceInfo.name, name: _deviceNameBinding)
+            } label: {
+                infoRow(L10n.DeviceInfo.name, Text(verbatim: entry.displayName))
+            }
+        } else {
+            // a scanned peripheral is listed by the name it advertises, never by the stored
+            // alias, so editing the name here would look like a no-op
+            infoRow(L10n.DeviceInfo.name, Text(verbatim: entry.displayName))
         }
     }
 

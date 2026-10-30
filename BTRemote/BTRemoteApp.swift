@@ -6,6 +6,9 @@ import UIKit
 struct BTRemoteApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var lowEnergy = HIDPeripheral()
+    /// The scanning side, kept here because the scene's phase drives its lifetime: the device
+    /// list is a foreground tool and nothing it connected may outlive the foreground.
+    @StateObject private var central = HIDCentral()
 
     /// Declared outside any tab on purpose: advertising is what wakes paired
     /// hosts, so it does not belong to whichever page is on screen. Off unless
@@ -78,13 +81,22 @@ struct BTRemoteApp: App {
     /// install window and a live service whose advertising the user already stopped, not
     /// just `isAdvertising`. The resume is gated on `didSuspendPeripheral`, which is what
     /// keeps it a resume rather than a way to start advertising.
+    ///
+    /// The scanning side follows the same two edges, with no bit of its own: it never scans
+    /// on returning, and `suspend` takes down only what it owns. That both are called here,
+    /// outside the pages, is why a device list left open cannot keep a link through the
+    /// background.
     private func _scenePhaseChanged(_ phase: ScenePhase) {
         switch phase {
         case .active:
+            // rebuilds only a session that had already used the device list, and never scans
+            central.resume()
             guard didSuspendPeripheral else { return }
             didSuspendPeripheral = false
             lowEnergy.resume()
         case .background:
+            // the device list is foreground-only: stop looking and end every link it made
+            central.suspend()
             guard lowEnergy.isOnTheAir else { return }
             lowEnergy.suspend()
             didSuspendPeripheral = true
@@ -101,6 +113,7 @@ struct BTRemoteApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(lowEnergy)
+                .environmentObject(central)
                 .environmentObject(deviceNames)
                 .environment(\.hid, hid)
                 .environment(\.appTheme, theme)

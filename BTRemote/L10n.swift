@@ -61,6 +61,10 @@ enum L10n {
             "section.connection"
         }
 
+        static var devices: LocalizedStringKey {
+            "section.devices"
+        }
+
         static var battery: LocalizedStringKey {
             "section.battery"
         }
@@ -119,14 +123,63 @@ enum L10n {
             "action.stop_advertising"
         }
 
+        static var scanNearbyDevices: LocalizedStringKey {
+            "action.scan_nearby_devices"
+        }
+
+        static var stopScanning: LocalizedStringKey {
+            "action.stop_scanning"
+        }
+
         static var notNow: LocalizedStringKey {
             "action.not_now"
         }
     }
 
     enum Device {
+        static var emptyState: LocalizedStringKey {
+            "device.empty_state"
+        }
+
         static var unknownName: String {
             String(localized: "device.unknown_name")
+        }
+
+        /// The scanned peripheral is gone by the time the user taps Connect.
+        static var unavailable: String {
+            String(localized: "device.unavailable")
+        }
+
+        static var connectedLegend: LocalizedStringKey {
+            "device.connected_legend"
+        }
+
+        static func rssi(_ value: Int) -> String {
+            String.localizedStringWithFormat(
+                String(localized: "device.rssi_format"),
+                value
+            )
+        }
+
+        static func connectAccessibilityLabel(_ name: String) -> String {
+            String.localizedStringWithFormat(
+                String(localized: "device.connect_accessibility_label"),
+                name
+            )
+        }
+
+        static func disconnectAccessibilityLabel(_ name: String) -> String {
+            String.localizedStringWithFormat(
+                String(localized: "device.disconnect_accessibility_label"),
+                name
+            )
+        }
+
+        static func cancelConnectAccessibilityLabel(_ name: String) -> String {
+            String.localizedStringWithFormat(
+                String(localized: "device.cancel_connect_accessibility_label"),
+                name
+            )
         }
 
         static var inactive: LocalizedStringKey {

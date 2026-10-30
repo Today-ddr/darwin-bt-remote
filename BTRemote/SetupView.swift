@@ -110,6 +110,11 @@ struct SetupView: View {
                     Label(L10n.Action.startAdvertising, systemImage: "antenna.radiowaves.left.and.right")
                 }
             }
+            NavigationLink {
+                DeviceListView()
+            } label: {
+                Label(L10n.Section.devices, systemImage: "dot.radiowaves.left.and.right")
+            }
         }
     }
 
@@ -176,20 +181,6 @@ struct SetupView: View {
     }
 }
 
-private extension CBManagerState {
-    var localizedLabel: LocalizedStringKey {
-        switch self {
-        case .unknown: return L10n.BluetoothState.unknown
-        case .resetting: return L10n.BluetoothState.resetting
-        case .unsupported: return L10n.BluetoothState.unsupported
-        case .unauthorized: return L10n.BluetoothState.unauthorized
-        case .poweredOff: return L10n.BluetoothState.poweredOff
-        case .poweredOn: return L10n.BluetoothState.poweredOn
-        @unknown default: return L10n.BluetoothState.unavailable
-        }
-    }
-}
-
 private extension KeyboardLEDs {
     var localizedLabel: String {
         var parts: [String] = []
@@ -210,6 +201,7 @@ private extension KeyboardLEDs {
     #Preview {
         SetupView()
             .environmentObject(HIDPeripheral())
+            .environmentObject(HIDCentral())
             .environmentObject(DeviceNameStore())
     }
 #endif
